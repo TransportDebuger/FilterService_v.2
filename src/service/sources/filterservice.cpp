@@ -14,7 +14,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    Logger::init(serviceLogPath, LogLevel::INFO, true, DEFAULT_LOGSIZE);
+    Logger::init(serviceLogPath, true, DEFAULT_LOGSIZE);
+    Logger::setMinLevel(LogLevel::INFO);
     Logger::info("Service started");
 
     Logger::info("Service stopped");

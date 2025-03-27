@@ -35,8 +35,8 @@ enum class LogLevel {
 
 class Logger {
 public:
-    static void init(const std::string& filename, LogLevel level = LogLevel::INFO, bool rotateBySize = true, size_t maxSize = DEFAULT_LOGSIZE);
-    void setMinLevel(LogLevel level);
+    static void init(const std::string& filename, bool rotateBySize = true, size_t maxSize = DEFAULT_LOGSIZE);
+    static void setMinLevel(LogLevel level);
 
     static void info(const std::string& message);
     static void warn(const std::string& message);
@@ -44,7 +44,7 @@ public:
 
     static void rotateLog();
     static void close();
-    
+
 private:
     static std::ofstream logFile_;
     static LogLevel minLevel_;

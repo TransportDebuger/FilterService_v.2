@@ -9,12 +9,11 @@ size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
 LogLevel Logger::minLevel_ = LogLevel::INFO;
 
 // Инициализация логгера
-void Logger::init(const std::string& filename, LogLevel level, bool rotateBySize, size_t maxSize) {
+void Logger::init(const std::string& filename, bool rotateBySize, size_t maxSize) {
     std::lock_guard<std::mutex> lock(mutex_);
     filename_ = filename;
     rotateBySize_ = rotateBySize;
     maxSize_ = maxSize;
-    minLevel_ = level;
 
     // Открываем файл в режиме добавления
     logFile_.open(filename_, std::ios::app);
