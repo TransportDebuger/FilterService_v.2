@@ -9,6 +9,7 @@
 */
 
 #pragma once
+
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -33,16 +34,23 @@ enum class LogLevel {
     ERROR ///< Ошибки
 };
 
+/*!
+    \brief Класс логгера
+    \details Класс реализующий функциональность логгера
+*/
 class Logger {
 public:
     static void init(const std::string& filename, bool rotateBySize = true, size_t maxSize = DEFAULT_LOGSIZE);
+    static void initFallback();
     static void setMinLevel(LogLevel level);
 
+    static void debug(const std::string& message);
     static void info(const std::string& message);
     static void warn(const std::string& message);
     static void error(const std::string& message);
 
     static void rotateLog();
+    static bool isInitialized();
     static void close();
 
 private:
@@ -52,8 +60,11 @@ private:
     static std::string filename_;
     static bool rotateBySize_;
     static size_t maxSize_;
+    static bool initialized_;
 
     static std::string getCurrentTime(bool forFilename) ;
     static void log(LogLevel level, const std::string& message);
     static bool needsRotation();
 };
+
+LogLevel strToLogLevel(std::string level);

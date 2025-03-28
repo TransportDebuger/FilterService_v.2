@@ -1,24 +1,15 @@
-#include "../includes/logger.hpp"
+/*!
+  \file filterservice.cpp
+  \author Artem Ulyanov
+  \version 1
+  \date March, 2024
+  \brief Основной файл проекта filter_service.
+  \details Основной файл проекта filter_service. Описывает функцию основной точки входа в программу.
+*/
+
+#include "../includes/service_controller.hpp"
 
 int main(int argc, char** argv) {
-
-    std::string configPath = "/etc/stc_filter_service/config.json";
-    std::string serviceLogPath = "stc_filter_service.log";
-    bool debugMode = false;
-
-    for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--config" && i + 1 < argc) {
-            configPath = argv[i + 1];
-        } else if (std::string(argv[i]) == "--debug") {
-            debugMode = true;
-        }
-    }
-
-    Logger::init(serviceLogPath, true, DEFAULT_LOGSIZE);
-    Logger::setMinLevel(LogLevel::INFO);
-    Logger::info("Service started");
-
-    Logger::info("Service stopped");
-    Logger::close();
-    return 0;
+    ServiceController controller;
+    return controller.run(argc, argv);
 }

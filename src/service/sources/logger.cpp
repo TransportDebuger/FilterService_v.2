@@ -1,3 +1,14 @@
+/*!
+  \file logger.hpp
+  \author Artem Ulyanov
+  \version 1
+  \date March, 2024
+  \brief Файл реализации методов системы логгирования в проекте filter_service.
+  \details Файл является неотъемлимой частью проекта filter_service.
+    Данный файл содержит реализацию методов необходимых для выполнения функций ведения журнала.
+*/
+
+
 #include "../includes/logger.hpp"
 
 // Статические переменные
@@ -5,6 +16,7 @@ std::ofstream Logger::logFile_;
 std::mutex Logger::mutex_;
 std::string Logger::filename_;
 bool Logger::rotateBySize_ = true;
+bool Logger::initialized_ = false;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
 LogLevel Logger::minLevel_ = LogLevel::INFO;
 
@@ -110,6 +122,7 @@ void Logger::log(LogLevel level, const std::string& message) {
 }
 
 // Публичные методы
+void Logger::debug(const std::string& message) { log(LogLevel::DEBUG, message); }
 void Logger::info(const std::string& message) { log(LogLevel::INFO, message); }
 void Logger::warn(const std::string& message) { log(LogLevel::WARNING, message); }
 void Logger::error(const std::string& message) { log(LogLevel::ERROR, message); }
@@ -117,4 +130,26 @@ void Logger::error(const std::string& message) { log(LogLevel::ERROR, message); 
 void Logger::setMinLevel(LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     minLevel_ = level;
+}
+
+bool Logger::isInitialized() {
+    return initialized_;
+}
+
+LogLevel strToLogLevel(std::string level) {
+    LogLevel newLevel;
+
+    if (level == "info") {
+        newLevel = LogLevel::INFO;
+    } else if (level == "debug") {
+        newLevel = LogLevel::DEBUG;
+    } else if (level == "warning") {
+        newLevel = LogLevel::WARNING;
+    } else if (level == "error") {
+        newLevel = LogLevel::ERROR;
+    } else {
+        throw std::runtime_error("Fatal error: Unknown type of log level. Run service with --help to get usage hints.");
+    }
+
+    return newLevel;
 }
