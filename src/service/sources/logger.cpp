@@ -62,7 +62,7 @@ void Logger::close() {
     // Сброс fallback буфера
     if (fallbackUsed_) {
         std::cerr << fallbackBuffer_.str();
-        fallbackBuffer_.str(std::string()); // Очистка буфера
+        flushFallbackBuffer();
         fallbackUsed_ = false; // Сброс флага
     }
 }
