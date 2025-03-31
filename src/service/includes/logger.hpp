@@ -13,11 +13,13 @@
 #include <string>
 #include <fstream>
 #include <mutex>
-#include <memory>
-#include <ctime>
 #include <stdexcept>
-#include <sys/stat.h>
 #include <iostream>
+#include <chrono>
+#include <sstream>
+#include <ctime>
+#include <iomanip>
+#include <sys/stat.h>
 
 /*!
     \brief Размер файла журнала по умолчению.
@@ -50,7 +52,7 @@ public:
     static void error(const std::string& message);
 
     static void rotateLog();
-    static bool isInitialized();
+    static void Logger::flushFallbackBuffer();
     static void close();
 
 private:
@@ -60,7 +62,8 @@ private:
     static std::string filename_;
     static bool rotateBySize_;
     static size_t maxSize_;
-    static bool initialized_;
+    static std::stringstream fallbackBuffer_;
+    static bool fallbackUsed_;
 
     static std::string getCurrentTime(bool forFilename) ;
     static void log(LogLevel level, const std::string& message);
@@ -68,3 +71,4 @@ private:
 };
 
 LogLevel strToLogLevel(std::string level);
+std::string logLevelToStr(LogLevel level);

@@ -10,15 +10,23 @@
 
 
 #include "../includes/logger.hpp"
+#include "logger.hpp"
+
+#define COLOR_ERROR "\033[31m"
+#define COLOR_WARN "\033[33m"
+#define COLOR_DEBUG "\033[32m"
+#define COLOR_INFO "\033[36m"
+#define COLOR_RESET "\033[0m"
 
 // Статические переменные
 std::ofstream Logger::logFile_;
 std::mutex Logger::mutex_;
 std::string Logger::filename_;
 bool Logger::rotateBySize_ = true;
-bool Logger::initialized_ = false;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
 LogLevel Logger::minLevel_ = LogLevel::INFO;
+std::stringstream Logger::fallbackBuffer_;
+bool Logger::fallbackUsed_ = false;
 
 // Инициализация логгера
 void Logger::init(const std::string& filename, bool rotateBySize, size_t maxSize) {
@@ -27,18 +35,35 @@ void Logger::init(const std::string& filename, bool rotateBySize, size_t maxSize
     rotateBySize_ = rotateBySize;
     maxSize_ = maxSize;
 
-    // Открываем файл в режиме добавления
-    logFile_.open(filename_, std::ios::app);
-    if (!logFile_.is_open()) {
-        throw std::runtime_error("Cannot open log file: " + filename_);
+    try {
+        logFile_.open(filename_, std::ios::app);
+        if (!logFile_.is_open()) {
+            throw std::runtime_error("Cannot open log file: " + filename_);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error initializing logger: " << e.what() << std::endl;
+        initFallback();
     }
+}
+
+void Logger::initFallback() {
+    fallbackUsed_ = true;
 }
 
 // Закрытие файла (вызывается при завершении)
 void Logger::close() {
     std::lock_guard<std::mutex> lock(mutex_);
+    
     if (logFile_.is_open()) {
+        logFile_.flush(); // Принудительный сброс буфера
         logFile_.close();
+    }
+    
+    // Сброс fallback буфера
+    if (fallbackUsed_) {
+        std::cerr << fallbackBuffer_.str();
+        fallbackBuffer_.str(std::string()); // Очистка буфера
+        fallbackUsed_ = false; // Сброс флага
     }
 }
 
@@ -56,69 +81,118 @@ bool Logger::needsRotation() {
 // Ротация логов
 void Logger::rotateLog() {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    if (logFile_.is_open()) {
-        logFile_.close();
+    
+    if (!logFile_.is_open()) {
+        std::cerr << "Log file is not open, cannot rotate." << std::endl;
+        return;
     }
 
-    // Генерируем имя для старого лога (добавляем timestamp)
+    logFile_.close();
+
     std::string oldLog = filename_ + "." + getCurrentTime(true);
 
-    // Переименовываем текущий лог
-    if (rename(filename_.c_str(), oldLog.c_str())) {
-        logFile_.open(filename_, std::ios::app); // Пытаемся восстановить
-        throw std::runtime_error("Failed to rotate log file");
+    if (rename(filename_.c_str(), oldLog.c_str()) != 0) {
+        if (logFile_.is_open()) {
+            error("Failed to rename log file during rotation");
+        } else {
+            std::cerr << "Failed to rename log file during rotation" << std::endl;
+        }
+        
+        try {
+            logFile_.open(filename_, std::ios::app); // Восстановление
+        } catch (const std::exception& e) {
+            if (logFile_.is_open()) {
+                error("Failed to reopen log file after failed rotation: " + std::string(e.what()));
+            } else {
+                std::cerr << "Failed to reopen log file after failed rotation: " << e.what() << std::endl;
+            }
+            // Продолжаем логирование в старом файле
+        }
+        return;
     }
 
-    // Открываем новый файл
-    logFile_.open(filename_, std::ios::app);
-    if (!logFile_.is_open()) {
-        throw std::runtime_error("Cannot reopen log file after rotation");
+    try {
+        logFile_.open(filename_, std::ios::app);
+        if (!logFile_.is_open()) {
+            throw std::runtime_error("Cannot reopen log file after rotation");
+        }
+    } catch (const std::exception& e) {
+        if (logFile_.is_open()) {
+            error("Error reopening log file after rotation: " + std::string(e.what()));
+        } else {
+            std::cerr << "Error reopening log file after rotation: " << e.what() << std::endl;
+        }
+        // Продолжаем логирование в старом файле
     }
 }
 
 // Форматирование времени
 std::string Logger::getCurrentTime(bool forFilename) {
-    time_t now = time(nullptr);
-    struct tm tmStruct;
-    localtime_r(&now, &tmStruct);
+    std::lock_guard<std::mutex> lock(mutex_); // Синхронизация для многопоточной среды
+    
+    auto now = std::chrono::system_clock::now();
+    auto now_time = std::chrono::system_clock::to_time_t(now);
+    auto now_tm = *std::localtime(&now_time);
 
-    char buffer[80];
+    std::ostringstream oss;
     if (forFilename) {
-        strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", &tmStruct);
+        oss << std::put_time(&now_tm, "%Y%m%d_%H%M%S");
     } else {
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tmStruct);
+        oss << std::put_time(&now_tm, "%Y-%m-%d %H:%M:%S");
     }
-    return std::string(buffer);
+    return oss.str();
 }
 
 // Основная функция логирования
 void Logger::log(LogLevel level, const std::string& message) {
     std::lock_guard<std::mutex> lock(mutex_);
-
+    
     if (level < minLevel_) { return; }
     
-    if (!logFile_.is_open()) {
-        throw std::runtime_error("Log file is not open");
-    }
-
-    // Проверяем ротацию
-    if (needsRotation()) {
-        rotateLog();
-    }
-
-    // Уровни логирования
-    const char* levelStr = "";
+    std::string color;
     switch (level) {
-        case LogLevel::DEBUG:   levelStr = "DEBUG"; break;
-        case LogLevel::INFO:    levelStr = "INFO"; break;
-        case LogLevel::WARNING: levelStr = "WARN"; break;
-        case LogLevel::ERROR:   levelStr = "ERROR"; break;
+        case LogLevel::DEBUG:   color = COLOR_DEBUG; break;
+        case LogLevel::INFO:    color = COLOR_INFO; break;
+        case LogLevel::WARNING: color = COLOR_WARN; break;
+        case LogLevel::ERROR:   color = COLOR_ERROR; break;
     }
+    
+    std::string levelStr = logLevelToStr(level);
+    
+    if (logFile_.is_open()) {
+        // Проверяем ротацию
+        if (needsRotation()) {
+            try {
+                rotateLog();
+            } catch (const std::exception& e) {
+                if (logFile_.is_open()) {
+                    log(LogLevel::ERROR, "Failed to rotate log file: " + std::string(e.what()));
+                } else {
+                    std::cerr << color << "Failed to rotate log file: " << e.what() << COLOR_RESET << std::endl;
+                }
+                // Продолжаем логирование в старом файле
+            }
+        }
 
-    // Форматированная запись
-    logFile_ << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << std::endl;
-    logFile_.flush(); // Принудительно сбрасываем буфер
+        // Форматированная запись в лог-файл без цвета
+        try {
+            logFile_ << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << std::endl;
+            logFile_.flush(); // Принудительно сбрасываем буфер
+        } catch (const std::exception& e) {
+            std::cerr << color << "Error writing to log file: " << e.what() << COLOR_RESET << std::endl;
+            // Переход на fallback
+            fallbackBuffer_ << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << std::endl;
+            fallbackUsed_ = true;
+        }
+        
+        // Вывод в консоль с цветом
+        std::cerr << color << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << COLOR_RESET << std::endl;
+    } else {
+        // Если файл не открыт, используем fallback и выводим в консоль с цветом
+        std::cerr << color << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << COLOR_RESET << std::endl;
+        fallbackBuffer_ << "[" << getCurrentTime(false) << "] [" << levelStr << "] " << message << std::endl;
+        fallbackUsed_ = true;
+    }
 }
 
 // Публичные методы
@@ -132,8 +206,12 @@ void Logger::setMinLevel(LogLevel level) {
     minLevel_ = level;
 }
 
-bool Logger::isInitialized() {
-    return initialized_;
+void Logger::flushFallbackBuffer() {
+    if (fallbackUsed_) {
+        std::cerr << fallbackBuffer_.str();
+        fallbackBuffer_.str(std::string());
+        fallbackUsed_ = false;
+    }
 }
 
 LogLevel strToLogLevel(std::string level) {
@@ -152,4 +230,15 @@ LogLevel strToLogLevel(std::string level) {
     }
 
     return newLevel;
+}
+
+std::string logLevelToStr(LogLevel level) { 
+    std::string strLevel = "";
+    switch (level) {
+        case LogLevel::DEBUG:   strLevel = "DEBUG"; break;
+        case LogLevel::INFO:    strLevel = "INFO"; break;
+        case LogLevel::WARNING: strLevel = "WARN"; break;
+        case LogLevel::ERROR:   strLevel = "ERROR"; break;
+    }
+    return strLevel; 
 }
