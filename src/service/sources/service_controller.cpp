@@ -7,16 +7,13 @@ int ServiceController::run(int argc, char** argv) {
         if (parseArguments(argc, argv)) {
             initialize();
             mainLoop();
+            Logger::close();
             return EXIT_SUCCESS;
         } else {
             return EXIT_FAILURE;
         }
     } catch (const std::exception& e) {
-        if (Logger::isInitialized()) {
-            Logger::error(std::string("Fatal error: ") + e.what());
-        } else {
-            std::cerr << std::string("Fatal error: ") << e.what();
-        }
+        Logger::error(std::string("Fatal error: ") + e.what());
         return EXIT_FAILURE;
     }
 }
@@ -60,12 +57,12 @@ void ServiceController::initialize() {
 }
 
 void ServiceController::mainLoop() {
-    while (!SignalHandler::instance().shouldStop()) {
-        if (SignalHandler::instance().shouldReload()) {
-    //         master_.reload();
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-    }
+    // while (!SignalHandler::instance().shouldStop()) {
+    //     if (SignalHandler::instance().shouldReload()) {
+    // //         master_.reload();
+    //     }
+    //     std::this_thread::sleep_for(std::chrono::seconds(5));
+    // }
     //master_.stop();
 }
 

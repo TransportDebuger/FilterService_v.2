@@ -52,7 +52,7 @@ public:
     static void error(const std::string& message);
 
     static void rotateLog();
-    static void Logger::flushFallbackBuffer();
+    static void flushFallbackBuffer();
     static void close();
 
 private:
