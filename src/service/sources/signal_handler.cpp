@@ -3,13 +3,7 @@
 #include <stdexcept>
 #include <iostream>
 
-    // // Вспомогательная функция для проверки ошибок signal()
-    // void checkSignalError(int result, const char* message) {
-    //     if (result == SIG_ERR) {
-    //         Logger::error(message);
-    //         throw std::runtime_error(message);
-    //     }
-    // }
+//Доработать буферизацию ошибок до инициализации Logger.
 
 SignalHandler& SignalHandler::instance() {
     static SignalHandler instance;
