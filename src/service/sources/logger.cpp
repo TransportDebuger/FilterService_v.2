@@ -20,20 +20,15 @@
 #define COLOR_RESET "\033[0m"
 
 // Статические переменные
-std::ofstream Logger::logFile_;
-std::mutex Logger::mutex_;
-std::string Logger::filename_;
-bool Logger::rotateBySize_ = true;
+std::string Logger::filename_ = "./filter-service.log";
+bool Logger::rotateBySize_ = false;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
 Logger::LogLevel Logger::minLevel_ = Logger::LogLevel::INFO;
-std::stringstream Logger::fallbackBuffer_;
 bool Logger::fallbackUsed_ = false;
 
 // Инициализация логгера
-void Logger::init(bool rotateBySize, size_t maxSize) {
+void Logger::init() {
     std::lock_guard<std::mutex> lock(mutex_);
-    rotateBySize_ = rotateBySize;
-    maxSize_ = maxSize;
 
     try {
         logFile_.open(filename_, std::ios::app);
@@ -208,6 +203,15 @@ void Logger::setLevel(LogLevel level) {
 
 void Logger::setLogPath(std::string filename) {
     filename_ = filename;
+}
+
+void Logger::setLogRotation(bool isRotated, size_t logSize) {
+    rotateBySize_ = isRotated;
+    maxSize_ = logSize;
+}
+
+void Logger::setLogSize(size_t logSize) {
+    maxSize_ = logSize;
 }
 
 Logger::LogLevel Logger::getLevel() { return minLevel_; }

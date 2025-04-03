@@ -34,6 +34,10 @@ bool ServiceController::parseArguments(int argc, char** argv) {
             config_path_ = argv[++i];
         } else if (arg == "--log-file" && i + 1 < argc) {
             Logger::setLogPath(argv[++i]);
+        } else if (arg == "--log-rotate") {
+            Logger::setLogRotation(true);
+        } else if (arg == "--log-size" && i + 1 < argc) {
+            Logger::setLogSize(atoi(argv[++i]));
         } else {
             std::cout << "Unknown argument: " + arg << std::endl;
             printHelp();

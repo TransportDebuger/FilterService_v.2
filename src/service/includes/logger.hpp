@@ -41,11 +41,13 @@ public:
         WARNING, ///< Предупреждения
         ERROR ///< Ошибки
     };
-    static void init(bool rotateBySize, size_t maxSize = DEFAULT_LOGSIZE);
+    static void init();
     static void initFallback();
     
     static void setLevel(LogLevel level);
     static void setLogPath(std::string filename);
+    static void setLogRotation(bool isRotated, size_t logSize = DEFAULT_LOGSIZE);
+    static void setLogSize(size_t logSize);
     static LogLevel getLevel();
     static std::string getLogPath();
     static LogLevel strToLogLevel(std::string level);
