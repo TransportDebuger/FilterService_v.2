@@ -58,14 +58,14 @@ public:
     static void close();
 
 private:
-    static std::ofstream logFile_;
-    static LogLevel minLevel_;
-    static std::mutex mutex_;
-    static std::string filename_;
-    static bool rotateBySize_;
-    static size_t maxSize_;
-    static std::stringstream fallbackBuffer_;
-    static bool fallbackUsed_;
+    static std::ofstream logFile_;  ///< Указатель на лога
+    static LogLevel minLevel_;      ///< Минимально заданный уровень логирования сервиса (может переопределяться параметрами CLI и файлом конфигурации)
+    static std::mutex mutex_;  
+    static std::string filename_;   ///< Имя логфайла
+    static bool rotateBySize_;      ///< Признак необходимости ротации лога (задается параметрами CLI или определяется в файле конфигурации)
+    static size_t maxSize_;         ///< Максимальный размер лог-файла (игнорируется при ротации)
+    static std::stringstream fallbackBuffer_; ///< FallBack буфер сообщений логирования
+    static bool fallbackUsed_;      ///< Признаки спользования fallback логирования
 
     static std::string getCurrentTime(bool forFilename) ;
     static void log(LogLevel level, const std::string& message);

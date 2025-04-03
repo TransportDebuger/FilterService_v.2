@@ -10,6 +10,7 @@
 
 
 #include "../includes/logger.hpp"
+#include "logger.hpp"
 //#include "logger.hpp"
 
 #define COLOR_ERROR "\033[31m"
@@ -205,6 +206,8 @@ void Logger::setLevel(LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     minLevel_ = level;
 }
+
+Logger::LogLevel Logger::getLevel() { return minLevel_; }
 
 void Logger::flushFallbackBuffer() {
     if (fallbackUsed_) {
