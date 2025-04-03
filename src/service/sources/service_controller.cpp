@@ -66,8 +66,8 @@ void ServiceController::initialize() {
 }
 
 void ServiceController::mainLoop() {
-    // while (!SignalHandler::instance().shouldStop()) {
-    //     if (SignalHandler::instance().shouldReload()) {
+    while (!SignalHandler::instance().shouldStop()) {
+        if (SignalHandler::instance().shouldReload()) {
     //         // if (master_.getState() == Master::State::RUNNING) {
     //         //     try {
     //         //         master_.reload(); // Перезагрузка конфигурации
@@ -80,9 +80,9 @@ void ServiceController::mainLoop() {
     //         //     Logger::warn("Reload attempted while not in RUNNING state");
     //         //     SignalHandler::instance().resetFlags();
     //         // }
-    //     }
-    //     std::this_thread::sleep_for(std::chrono::seconds(1));
-    // }
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 
     //master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
 }
@@ -92,8 +92,12 @@ void ServiceController::printHelp() const {
               << "Usage:\n"
               << "  service [options]\n\n"
               << "Options:\n"
-              << "  --help, -h      Show this help message\n"
-              << "  --log-level     Run with specified logging mode (debug, info, warning, error)\n"
-              << "                  If mode not specified, uses a info log mode\n"
-              << "  --config <path> Specify configuration file path\n";
+              << "  --help, -h         Show this help message\n"
+              << "  --log-level        Specify logging mode (debug, info, warning, error)\n"
+              << "                     If mode not specified, uses a \"info\" log mode\n"
+              << "  --log-file <file>  Log messages to <file>\n" 
+              << "  --log-rotate       Log rotation specified.\n" 
+              << "  --log-size <bytes> Size of log file when log will rotated. \n" 
+              << "                     If --log-rotate not specified, parameter value aren't use.\n"
+              << "  --config <file>    Specify configuration file path\n";
 }

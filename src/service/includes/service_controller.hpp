@@ -2,7 +2,7 @@
 #include <string>
 
 #include "../includes/logger.hpp"
-// #include "../includes/master.hpp"
+#include "../includes/master.hpp"
 
 /*!
     \brief Основной контроллер сервиса.
