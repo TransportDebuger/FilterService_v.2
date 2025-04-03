@@ -24,7 +24,7 @@ std::mutex Logger::mutex_;
 std::string Logger::filename_;
 bool Logger::rotateBySize_ = true;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
-LogLevel Logger::minLevel_ = LogLevel::INFO;
+Logger::LogLevel Logger::minLevel_ = LogLevel::INFO;
 std::stringstream Logger::fallbackBuffer_;
 bool Logger::fallbackUsed_ = false;
 
@@ -201,7 +201,7 @@ void Logger::info(const std::string& message) { log(LogLevel::INFO, message); }
 void Logger::warn(const std::string& message) { log(LogLevel::WARNING, message); }
 void Logger::error(const std::string& message) { log(LogLevel::ERROR, message); }
 
-void Logger::setMinLevel(LogLevel level) {
+void Logger::setLevel(LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     minLevel_ = level;
 }
@@ -214,7 +214,7 @@ void Logger::flushFallbackBuffer() {
     }
 }
 
-LogLevel strToLogLevel(std::string level) {
+Logger::LogLevel Logger::strToLogLevel(std::string level) {
     LogLevel newLevel;
 
     if (level == "info") {
@@ -232,13 +232,13 @@ LogLevel strToLogLevel(std::string level) {
     return newLevel;
 }
 
-std::string logLevelToStr(LogLevel level) { 
+std::string Logger::logLevelToStr(Logger::LogLevel level) { 
     std::string strLevel = "";
     switch (level) {
-        case LogLevel::DEBUG:   strLevel = "DEBUG"; break;
-        case LogLevel::INFO:    strLevel = "INFO"; break;
-        case LogLevel::WARNING: strLevel = "WARN"; break;
-        case LogLevel::ERROR:   strLevel = "ERROR"; break;
+        case Logger::LogLevel::DEBUG:   strLevel = "DEBUG"; break;
+        case Logger::LogLevel::INFO:    strLevel = "INFO"; break;
+        case Logger::LogLevel::WARNING: strLevel = "WARN"; break;
+        case Logger::LogLevel::ERROR:   strLevel = "ERROR"; break;
     }
     return strLevel; 
 }

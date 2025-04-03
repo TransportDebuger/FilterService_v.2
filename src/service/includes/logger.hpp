@@ -27,24 +27,26 @@
 #define DEFAULT_LOGSIZE 10485760
 
 /*!
-    \brief Перечисление уровней детализации журналирования
-*/
-enum class LogLevel {
-    DEBUG, ///< Отладочные сообщения
-    INFO, ///< Информационные сообщения
-    WARNING, ///< Предупреждения
-    ERROR ///< Ошибки
-};
-
-/*!
     \brief Класс логгера
     \details Класс реализующий функциональность логгера
 */
 class Logger {
 public:
+    /*!
+        \brief Перечисление уровней детализации журналирования
+    */
+    enum class LogLevel {
+        DEBUG, ///< Отладочные сообщения
+        INFO, ///< Информационные сообщения
+        WARNING, ///< Предупреждения
+        ERROR ///< Ошибки
+    };
     static void init(const std::string& filename, bool rotateBySize = true, size_t maxSize = DEFAULT_LOGSIZE);
     static void initFallback();
-    static void setMinLevel(LogLevel level);
+    
+    static void setLevel(LogLevel level);
+    static LogLevel getLevel();
+    static LogLevel strToLogLevel(std::string level);
 
     static void debug(const std::string& message);
     static void info(const std::string& message);
@@ -68,7 +70,5 @@ private:
     static std::string getCurrentTime(bool forFilename) ;
     static void log(LogLevel level, const std::string& message);
     static bool needsRotation();
+    static std::string logLevelToStr(LogLevel level);
 };
-
-LogLevel strToLogLevel(std::string level);
-std::string logLevelToStr(LogLevel level);
