@@ -3,6 +3,13 @@
 //#include "../includes/daemonizer.hpp"
 #include <thread>
 
+/**
+ * @public
+ * @param [in] argc Количество переданных аргументов
+ * @param [in] argv Массив строк содержащих значения переданных аргументов
+ * @return Возвращаемый код выполнения процесса. 0 - если успешно.
+ * @brief Функция запуска выполнения основного процесса
+ */
 int ServiceController::run(int argc, char** argv) {
     try {
         if (parseArguments(argc, argv)) {
@@ -20,6 +27,15 @@ int ServiceController::run(int argc, char** argv) {
     }
 }
 
+/**
+ * @param [in] argc Количество переданных аргументов
+ * @param [in] argv Массив строк содержащих значения переданных аргументов
+ * @return Логическое значение успешности выполнения разбора параметров.
+ * @brief Функция разбора входящих аргументов командной строки
+ * 
+ * @details Функция выполняет разбор параметров, переданных из командной строки при запуске программы.
+ *          Функция возвращает: false - если в результате разбора возникли ошибки, true - если разбор прошел успешно.
+ */
 bool ServiceController::parseArguments(int argc, char** argv) {
     
     for (int i = 1; i < argc; ++i) {
@@ -29,7 +45,7 @@ bool ServiceController::parseArguments(int argc, char** argv) {
             ServiceController::printHelp();
             return false;
         } else if (arg == "--reload" || arg == "-r") {
-            // Параметр, при котором запущенному (работающему) сервису посылается сигнал о необходимости перезапуска с обновленной конфигурацией.
+            // Параметр, при котором запускаемый экземпляр сервиса посылает запущенному (работающему) сервису сигнал о необходимости перезапуска с обновленной конфигурацией.
         } else if (arg == "--log-level" && i + 1 < argc) {
             Logger::setLevel(Logger::strToLogLevel(argv[++i]));
         } else if (arg == "--config" && i + 1 < argc) {
@@ -50,6 +66,12 @@ bool ServiceController::parseArguments(int argc, char** argv) {
     return true;
 }
 
+/**
+ * @brief Функция инициализации систем сервиса.abort
+ * 
+ * @details Предназначена для последовательной инициализации процессов сервиса.
+ *          При вызове функции осуществляется инициализация обработчика системных сигналов SignalHandler, инициализация логера Logger, запуск мастер-процесса Master.
+ */
 void ServiceController::initialize() {
     SignalHandler::instance();
 
@@ -58,35 +80,43 @@ void ServiceController::initialize() {
     //      Daemonizer::daemonize();
     // }
 
-    // if (!master_.start(config_path_)) {
-    //      throw std::runtime_error("Failed to start master process");
-    // }
+    if (!master_.start(config_path_)) {
+         throw std::runtime_error("Failed to start master process");
+    }
     
     Logger::init();
 }
 
+/**
+ * @brief Функция выполнения основного процесса ServiceController
+ */
 void ServiceController::mainLoop() {
     while (!SignalHandler::instance().shouldStop()) {
         if (SignalHandler::instance().shouldReload()) {
-    //         // if (master_.getState() == Master::State::RUNNING) {
-    //         //     try {
-    //         //         master_.reload(); // Перезагрузка конфигурации
-    //         //         SignalHandler::instance().resetFlags();
-    //         //         Logger::info("Service reloaded successfully");
-    //         //     } catch (const std::exception& e) {
-    //         //         Logger::error("Service reload failed: " + std::string(e.what()));
-    //         //     }
-    //         // } else {
-    //         //     Logger::warn("Reload attempted while not in RUNNING state");
-    //         //     SignalHandler::instance().resetFlags();
-    //         // }
+            if (master_.getState() == Master::State::RUNNING) {
+                try {
+                    master_.reload(); // Перезагрузка конфигурации
+                    SignalHandler::instance().resetFlags();
+                    Logger::info("Service reloaded successfully");
+                } catch (const std::exception& e) {
+                    Logger::error("Service reload failed: " + std::string(e.what()));
+                }
+            } else {
+                Logger::warn("Reload attempted while not in RUNNING state");
+                SignalHandler::instance().resetFlags();
+            }
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    //master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
+    master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
 }
 
+/**
+ * @brief Функция вывода подсказки об использовании параметров командной строки.
+ * 
+ * @details Функция выполняет вывод в стандартный поток сообщения, содержащего подсказку о параметрах командной строки (help message).
+ */
 void ServiceController::printHelp() const {
     std::cout << "XML Filter Service\n\n"
               << "Usage:\n"
