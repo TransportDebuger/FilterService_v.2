@@ -1,9 +1,8 @@
 #include "../includes/signal_handler.hpp"
 #include "../includes/logger.hpp"
-#include <stdexcept>
 #include <iostream>
-
-//Доработать буферизацию ошибок до инициализации Logger.
+#include <csignal>
+#include <stdexcept>
 
 SignalHandler& SignalHandler::instance() {
     static SignalHandler instance;
@@ -25,121 +24,129 @@ void SignalHandler::registerHandler(int signum, Callback callback) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // Сохраняем оригинальный обработчик при первом вызове
-    if (original_handlers_.find(signum) == original_handlers_.end()) {
-        saveOriginalHandler(signum);
+    // Save original handler
+    saveOriginalHandler(signum);
+
+    // Set new handler
+    handlers_[signum] = callback;
+    setSignalHandler(signum);
+}
+
+void SignalHandler::unregisterHandler(int signum) {
+    if (!isValidSignal(signum)) {
+        throw std::invalid_argument("Invalid signal number");
     }
 
-    handlers_[signum].push_back(std::move(callback));
+    std::lock_guard<std::mutex> lock(mutex_);
 
-    // Проверка наличия обработчиков
-    if (!handlers_[signum].empty()) {
-        setSignalHandler(signum);
-    }
+    // Restore original handler
+    restoreHandler(signum);
+
+    // Remove handler from map
+    handlers_.erase(signum);
 }
 
 bool SignalHandler::shouldStop() const noexcept {
-    return stop_flag_.load(std::memory_order_acquire);
+    return stop_flag_.load();
 }
 
 bool SignalHandler::shouldReload() const noexcept {
-    return reload_flag_.load(std::memory_order_acquire);
+    return reload_flag_.load();
 }
 
 void SignalHandler::resetFlags() noexcept {
-    stop_flag_.store(false, std::memory_order_release);
-    reload_flag_.store(false, std::memory_order_release);
+    stop_flag_.store(false);
+    reload_flag_.store(false);
 }
 
 void SignalHandler::restoreHandler(int signum) {
+    if (!isValidSignal(signum)) {
+        throw std::invalid_argument("Invalid signal number");
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto it = original_handlers_.find(signum);
-    if (it != original_handlers_.end()) {
-        auto result = std::signal(signum, it->second);
-        if (result == SIG_ERR) {
-            Logger::error("Failed to restore original handler");
-            throw std::runtime_error("Failed to restore original handler");
+    if (original_handlers_.count(signum)) {
+        if (sigaction(signum, &original_handlers_.at(signum), nullptr) == -1) {
+            // Log an error using cerr since Logger might not be initialized yet
+            std::cerr << "Error restoring signal handler for signal " << signum << std::endl;
         }
-        original_handlers_.erase(it);
-        handlers_.erase(signum);
+        original_handlers_.erase(signum);
     }
 }
 
 void SignalHandler::restoreAllHandlers() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    for (const auto& [signum, handler] : original_handlers_) {
-        std::signal(signum, handler);
+    for (auto const& [signum, action] : original_handlers_) {
+        if (sigaction(signum, &action, nullptr) == -1) {
+            // Log an error using cerr since Logger might not be initialized yet
+            std::cerr << "Error restoring signal handler for signal " << signum << std::endl;
+        }
     }
-
     original_handlers_.clear();
-    handlers_.clear();
 }
 
-
 bool SignalHandler::isValidSignal(int signum) noexcept {
-    if (signum <= 0 || signum >= NSIG) return false;
-    if (signum == SIGKILL || signum == SIGSTOP) return false;
-    
-    auto handler = std::signal(signum, SIG_IGN);
-    if (handler == SIG_ERR) return false;
-    std::signal(signum, handler); // Восстановление исходного обработчика
-    
-    return true;
+    return signum > 0 && signum < NSIG;
 }
 
 void SignalHandler::saveOriginalHandler(int signum) {
-    auto original = std::signal(signum, SIG_DFL);
-    if (original == SIG_ERR) {
-        Logger::error("Failed to get original signal handler");
-        throw std::runtime_error("Failed to get original signal handler");
+    std::lock_guard<std::mutex> lock(mutex_);
+    struct sigaction current_action;
+    if (sigaction(signum, nullptr, &current_action) == 0) {
+        original_handlers_[signum] = current_action;
+    } else {
+        // Log an error using cerr since Logger might not be initialized yet
+        std::cerr << "Error saving original signal handler for signal " << signum << std::endl;
     }
-    original_handlers_[signum] = original;
 }
 
 void SignalHandler::setSignalHandler(int signum) {
-    if (std::signal(signum, &SignalHandler::handleSignal) == SIG_ERR) {
-        Logger::error("Failed to set signal handler");
-        throw std::runtime_error("Failed to set signal handler");
+    struct sigaction sa;
+    sa.sa_handler = handleSignal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(signum, &sa, nullptr) == -1) {
+        // Log an error using cerr since Logger might not be initialized yet
+        std::cerr << "Error setting signal handler for signal " << signum << std::endl;
     }
 }
 
 void SignalHandler::handleSignal(int signum) noexcept {
-    auto& instance = SignalHandler::instance();
+    SignalHandler& instance = SignalHandler::instance();
+    std::lock_guard<std::mutex> lock(instance.mutex_);
 
-    // Устанавливаем флаги
     switch (signum) {
         case SIGTERM:
         case SIGINT:
-            instance.stop_flag_.store(true, std::memory_order_release);
+            instance.stop_flag_.store(true);
             break;
         case SIGHUP:
-            instance.reload_flag_.store(true, std::memory_order_release);
+            instance.reload_flag_.store(true);
             break;
-    }
-
-    // Вызываем обработчики
-    std::unique_lock<std::mutex> lock(instance.mutex_);
-    auto it = instance.handlers_.find(signum);
-    if (it != instance.handlers_.end()) {
-        auto callbacks = it->second; // Копируем обработчики
-        lock.unlock(); // Разблокируем перед вызовом
-
-        for (const auto& callback : callbacks) {
-            try {
-                callback(signum);
-            } catch (const std::exception& e) {
-                Logger::error("Signal callback error: " + std::string(e.what()));
-            } catch (...) {
-                Logger::error("Unknown signal callback error");
+        default:
+            if (instance.handlers_.count(signum)) {
+                instance.handlers_.at(signum)(signum);
             }
-        }
+            break;
     }
 }
 
 void SignalHandler::registerDefaultHandlers() {
-    registerHandler(SIGTERM, [](int) {});
-    registerHandler(SIGINT, [](int) {});
-    registerHandler(SIGHUP, [](int) {});
+    registerHandler(SIGTERM, [](int signum) {
+        Logger::info("Received SIGTERM signal. Shutting down...");
+        SignalHandler::instance().stop_flag_.store(true);
+    });
+
+    registerHandler(SIGINT, [](int signum) {
+        Logger::info("Received SIGINT signal. Shutting down...");
+        SignalHandler::instance().stop_flag_.store(true);
+    });
+
+    registerHandler(SIGHUP, [](int signum) {
+        Logger::info("Received SIGHUP signal. Reloading configuration...");
+        SignalHandler::instance().reload_flag_.store(true);
+    });
 }

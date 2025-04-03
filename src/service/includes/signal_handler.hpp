@@ -1,11 +1,11 @@
 #pragma once
 
-#include <atomic>
+#include <iostream>
 #include <csignal>
-#include <functional>
 #include <map>
+#include <functional>
+#include <atomic>
 #include <mutex>
-#include <vector>
 
 class SignalHandler {
 public:
@@ -20,7 +20,10 @@ public:
 
     // Регистрация обработчика сигнала
     void registerHandler(int signum, Callback callback);
-    
+
+    // Отмена регистрации обработчика сигнала
+    void unregisterHandler(int signum);
+
     // Проверка флагов
     bool shouldStop() const noexcept;
     bool shouldReload() const noexcept;
@@ -42,10 +45,9 @@ private:
     void registerDefaultHandlers();
 
     // Данные
-    std::map<int, std::vector<Callback>> handlers_;
-    std::map<int, void(*)(int)> original_handlers_;
+    std::map<int, Callback> handlers_;
+    std::map<int, struct sigaction> original_handlers_;
     mutable std::mutex mutex_;
-
     std::atomic<bool> stop_flag_{false};
     std::atomic<bool> reload_flag_{false};
 };
