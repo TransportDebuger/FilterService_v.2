@@ -10,16 +10,19 @@
 
 
 #include "../includes/logger.hpp"
-#include "logger.hpp"
 //#include "logger.hpp"
 
-#define COLOR_ERROR "\033[31m"
-#define COLOR_WARN "\033[33m"
+#define COLOR_FATAL "\033[31m"
+#define COLOR_ERROR "\033[33m"
+#define COLOR_WARN "\033[35m"
 #define COLOR_DEBUG "\033[32m"
 #define COLOR_INFO "\033[36m"
 #define COLOR_RESET "\033[0m"
 
 // Статические переменные
+std::mutex Logger::mutex_;
+std::ofstream Logger::logFile_;
+std::stringstream Logger::fallbackBuffer_;
 std::string Logger::filename_ = "./filter-service.log";
 bool Logger::rotateBySize_ = false;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
@@ -75,6 +78,7 @@ bool Logger::needsRotation() {
 
 // Ротация логов
 void Logger::rotateLog() {
+    //Возможно зависание так как, ротация вызывается из метода log. Надо протестировать.
     std::lock_guard<std::mutex> lock(mutex_);
     
     if (!logFile_.is_open()) {
@@ -87,20 +91,12 @@ void Logger::rotateLog() {
     std::string oldLog = filename_ + "." + getCurrentTime(true);
 
     if (rename(filename_.c_str(), oldLog.c_str()) != 0) {
-        if (logFile_.is_open()) {
-            error("Failed to rename log file during rotation");
-        } else {
-            std::cerr << "Failed to rename log file during rotation" << std::endl;
-        }
+        std::cerr << "Failed to rename log file during rotation" << std::endl;
         
         try {
             logFile_.open(filename_, std::ios::app); // Восстановление
         } catch (const std::exception& e) {
-            if (logFile_.is_open()) {
-                error("Failed to reopen log file after failed rotation: " + std::string(e.what()));
-            } else {
-                std::cerr << "Failed to reopen log file after failed rotation: " << e.what() << std::endl;
-            }
+            std::cerr << "Failed to reopen log file after failed rotation: " << e.what() << std::endl;
             // Продолжаем логирование в старом файле
         }
         return;
@@ -123,8 +119,6 @@ void Logger::rotateLog() {
 
 // Форматирование времени
 std::string Logger::getCurrentTime(bool forFilename) {
-    std::lock_guard<std::mutex> lock(mutex_); // Синхронизация для многопоточной среды
-    
     auto now = std::chrono::system_clock::now();
     auto now_time = std::chrono::system_clock::to_time_t(now);
     auto now_tm = *std::localtime(&now_time);
@@ -195,13 +189,14 @@ void Logger::debug(const std::string& message) { log(LogLevel::DEBUG, message); 
 void Logger::info(const std::string& message) { log(LogLevel::INFO, message); }
 void Logger::warn(const std::string& message) { log(LogLevel::WARNING, message); }
 void Logger::error(const std::string& message) { log(LogLevel::ERROR, message); }
+void Logger::fatal(const std::string& message) { log(LogLevel::FATAL, message); }
 
-void Logger::setLevel(LogLevel level) {
+void Logger::setLevel(const LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     minLevel_ = level;
 }
 
-void Logger::setLogPath(std::string filename) {
+void Logger::setLogPath(const std::string& filename) {
     filename_ = filename;
 }
 
@@ -226,7 +221,7 @@ void Logger::flushFallbackBuffer() {
     }
 }
 
-Logger::LogLevel Logger::strToLogLevel(std::string level) {
+Logger::LogLevel Logger::strToLogLevel(const std::string& level) {
     LogLevel newLevel;
 
     if (level == "info") {
@@ -237,6 +232,8 @@ Logger::LogLevel Logger::strToLogLevel(std::string level) {
         newLevel = LogLevel::WARNING;
     } else if (level == "error") {
         newLevel = LogLevel::ERROR;
+    }  else if (level == "fatal") {
+        newLevel = LogLevel::FATAL;
     } else {
         throw std::runtime_error("Fatal error: Unknown type of log level. Run service with --help to get usage hints.");
     }
@@ -251,6 +248,7 @@ std::string Logger::logLevelToStr(Logger::LogLevel level) {
         case Logger::LogLevel::INFO:    strLevel = "INFO"; break;
         case Logger::LogLevel::WARNING: strLevel = "WARN"; break;
         case Logger::LogLevel::ERROR:   strLevel = "ERROR"; break;
+        case Logger::LogLevel::FATAL:   strLevel = "FATAL"; break;
     }
     return strLevel; 
 }

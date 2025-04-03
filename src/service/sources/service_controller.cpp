@@ -28,6 +28,8 @@ bool ServiceController::parseArguments(int argc, char** argv) {
         if (arg == "--help" || arg == "-h") {
             ServiceController::printHelp();
             return false;
+        } else if (arg == "--reload" || arg == "-r") {
+            // Параметр, при котором запущенному (работающему) сервису посылается сигнал о необходимости перезапуска с обновленной конфигурацией.
         } else if (arg == "--log-level" && i + 1 < argc) {
             Logger::setLevel(Logger::strToLogLevel(argv[++i]));
         } else if (arg == "--config" && i + 1 < argc) {
@@ -49,40 +51,41 @@ bool ServiceController::parseArguments(int argc, char** argv) {
 }
 
 void ServiceController::initialize() {
-    SignalHandler::instance();
+    // SignalHandler::instance();
 
     //Подумать, нужна ли реализация демонизации сервиса.
     // if (run_as_daemon_) {
     //      Daemonizer::daemonize();
     // }
 
-    if (!master_.start(config_path_)) {
-         throw std::runtime_error("Failed to start master process");
-    }
+    // if (!master_.start(config_path_)) {
+    //      throw std::runtime_error("Failed to start master process");
+    // }
     
     Logger::init();
+    Logger::info("1111");
 }
 
 void ServiceController::mainLoop() {
-    while (!SignalHandler::instance().shouldStop()) {
-        if (SignalHandler::instance().shouldReload()) {
-            if (master_.getState() == Master::State::RUNNING) {
-                try {
-                    master_.reload(); // Перезагрузка конфигурации
-                    SignalHandler::instance().resetFlags();
-                    Logger::info("Service reloaded successfully");
-                } catch (const std::exception& e) {
-                    Logger::error("Service reload failed: " + std::string(e.what()));
-                }
-            } else {
-                Logger::warn("Reload attempted while not in RUNNING state");
-                SignalHandler::instance().resetFlags();
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    // while (!SignalHandler::instance().shouldStop()) {
+    //     if (SignalHandler::instance().shouldReload()) {
+    //         // if (master_.getState() == Master::State::RUNNING) {
+    //         //     try {
+    //         //         master_.reload(); // Перезагрузка конфигурации
+    //         //         SignalHandler::instance().resetFlags();
+    //         //         Logger::info("Service reloaded successfully");
+    //         //     } catch (const std::exception& e) {
+    //         //         Logger::error("Service reload failed: " + std::string(e.what()));
+    //         //     }
+    //         // } else {
+    //         //     Logger::warn("Reload attempted while not in RUNNING state");
+    //         //     SignalHandler::instance().resetFlags();
+    //         // }
+    //     }
+    //     std::this_thread::sleep_for(std::chrono::seconds(1));
+    // }
 
-    master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
+    //master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
 }
 
 void ServiceController::printHelp() const {

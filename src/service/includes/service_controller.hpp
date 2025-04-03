@@ -2,7 +2,7 @@
 #include <string>
 
 #include "../includes/logger.hpp"
-#include "../includes/master.hpp"
+// #include "../includes/master.hpp"
 
 /*!
     \brief Основной контроллер сервиса.
@@ -20,5 +20,5 @@ private:
     bool run_as_daemon_ = false;
     std::string config_path_ = "./config.json";                        ///< Путь к конфигруационному файлу по умолчанию.
     //std::string log_path_ = "/etc/xml_filter_service/config.json";   ///< Путь к конфигруационному файлу по умолчанию.
-    Master master_;                                                    ///< Экземпляр мастер-процесса сервиса.
+    //Master master_;                                                    ///< Экземпляр мастер-процесса сервиса.
 };

@@ -1,11 +1,10 @@
-/*!
-  \file logger.hpp
-  \author Artem Ulyanov
-  \version 1
-  \date March, 2024
-  \brief Файл описания системы логгирования в проекте filter_service.
-  \details Файл является неотъемлимой частью проекта filter_service.
-    Данный файл содержит описание макросов, перечислений, классов, из свойств и методов необходимых для реализации функций ведения журнала.
+/**
+ * @file logger.hpp
+ * @author Artem Ulyanov
+ * @version 1
+ * @date March, 2025
+ * @brief Заголовочный файл описания класса Logger и макросов.
+ * @details Файл содержит определение макросов и класса Logger, реализующего функциональность процесса журналирования.
 */
 
 #pragma once
@@ -21,42 +20,44 @@
 #include <iomanip>
 #include <sys/stat.h>
 
-/*!
-    \brief Размер файла журнала по умолчению.
+/**
+ *   @brief Макрос определения размера логфайла (в байтах).
 */
 #define DEFAULT_LOGSIZE 10485760
 
-/*!
-    \brief Класс логгера
-    \details Класс реализующий функциональность логгера
+/**
+ *   @brief Класс логгера
+ *   @details Класс реализующий функциональность логгера
 */
 class Logger {
 public:
-    /*!
-        \brief Перечисление уровней детализации журналирования
+    /**
+     *   @brief Перечисление уровней детализации журналирования.
     */
     enum class LogLevel {
-        DEBUG, ///< Отладочные сообщения
-        INFO, ///< Информационные сообщения
-        WARNING, ///< Предупреждения
-        ERROR ///< Ошибки
+        DEBUG,   ///< Подробные сообщения, используемые во время отладки приложения
+        INFO,    ///< Информационные сообщения о том, что происходит в приложении
+        WARNING, ///< Предупреждения о возникновении нежелательных сиутаций
+        ERROR,   ///< Ошибки при которых приложение способно продолжить работать
+        FATAL    ///< Фатальные ошибки, приводящие к завершению работы приложения
     };
+
     static void init();
     static void initFallback();
     
-    static void setLevel(LogLevel level);
-    static void setLogPath(std::string filename);
+    static void setLevel(const LogLevel level);
+    static void setLogPath(const std::string& filename);
     static void setLogRotation(bool isRotated, size_t logSize = DEFAULT_LOGSIZE);
     static void setLogSize(size_t logSize);
     static LogLevel getLevel();
     static std::string getLogPath();
-    static LogLevel strToLogLevel(std::string level);
-
+    static LogLevel strToLogLevel(const std::string& level);
 
     static void debug(const std::string& message);
     static void info(const std::string& message);
     static void warn(const std::string& message);
     static void error(const std::string& message);
+    static void fatal(const std::string& message);
 
     static void rotateLog();
     static void flushFallbackBuffer();
@@ -64,15 +65,15 @@ public:
 
 private:
     static std::ofstream logFile_;  ///< Дескриптор лог-файла
-    static LogLevel minLevel_;      ///< Минимально заданный уровень логирования сервиса (может переопределяться параметрами CLI и файлом конфигурации)
+    static LogLevel minLevel_;      ///< Минимально заданный уровень логирования для логера.
     static std::mutex mutex_;  
     static std::string filename_;   ///< Имя логфайла
-    static bool rotateBySize_;      ///< Признак необходимости ротации лога (задается параметрами CLI или определяется в файле конфигурации)
-    static size_t maxSize_;         ///< Максимальный размер лог-файла (игнорируется при ротации)
+    static bool rotateBySize_;      ///< Признак необходимости ротации лога (если true, то осуществляется ротация лог-файлов)
+    static size_t maxSize_;         ///< Максимальный размер лог-файла (игнорируется при rotateBySize_ = false)
     static std::stringstream fallbackBuffer_; ///< FallBack буфер сообщений логирования
     static bool fallbackUsed_;      ///< Признак использования fallback логирования
 
-    static std::string getCurrentTime(bool forFilename) ;
+    static std::string getCurrentTime(bool forFilename);
     static void log(LogLevel level, const std::string& message);
     static bool needsRotation();
     static std::string logLevelToStr(LogLevel level);
