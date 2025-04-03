@@ -1,8 +1,8 @@
 /*!
-  \file logger.hpp
+  \file logger.cpp
   \author Artem Ulyanov
   \version 1
-  \date March, 2024
+  \date March, 2025
   \brief Файл реализации методов системы логгирования в проекте filter_service.
   \details Файл является неотъемлимой частью проекта filter_service.
     Данный файл содержит реализацию методов необходимых для выполнения функций ведения журнала.
@@ -26,7 +26,7 @@ std::stringstream Logger::fallbackBuffer_;
 std::string Logger::filename_ = "./filter-service.log";
 bool Logger::rotateBySize_ = false;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
-Logger::LogLevel Logger::minLevel_ = Logger::LogLevel::INFO;
+Logger::LogLevel Logger::minLevel_ = Logger::LogLevel::DEBUG;
 bool Logger::fallbackUsed_ = false;
 
 // Инициализация логгера

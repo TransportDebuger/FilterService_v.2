@@ -51,7 +51,7 @@ bool ServiceController::parseArguments(int argc, char** argv) {
 }
 
 void ServiceController::initialize() {
-    // SignalHandler::instance();
+    SignalHandler::instance();
 
     //Подумать, нужна ли реализация демонизации сервиса.
     // if (run_as_daemon_) {
@@ -63,7 +63,6 @@ void ServiceController::initialize() {
     // }
     
     Logger::init();
-    Logger::info("1111");
 }
 
 void ServiceController::mainLoop() {

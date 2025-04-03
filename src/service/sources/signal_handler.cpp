@@ -92,7 +92,7 @@ bool SignalHandler::isValidSignal(int signum) noexcept {
 }
 
 void SignalHandler::saveOriginalHandler(int signum) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    //std::lock_guard<std::mutex> lock(mutex_);
     struct sigaction current_action;
     if (sigaction(signum, nullptr, &current_action) == 0) {
         original_handlers_[signum] = current_action;
