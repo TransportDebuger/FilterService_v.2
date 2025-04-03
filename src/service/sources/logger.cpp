@@ -25,14 +25,13 @@ std::mutex Logger::mutex_;
 std::string Logger::filename_;
 bool Logger::rotateBySize_ = true;
 size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
-Logger::LogLevel Logger::minLevel_ = LogLevel::INFO;
+Logger::LogLevel Logger::minLevel_ = Logger::LogLevel::INFO;
 std::stringstream Logger::fallbackBuffer_;
 bool Logger::fallbackUsed_ = false;
 
 // Инициализация логгера
-void Logger::init(const std::string& filename, bool rotateBySize, size_t maxSize) {
+void Logger::init(bool rotateBySize, size_t maxSize) {
     std::lock_guard<std::mutex> lock(mutex_);
-    filename_ = filename;
     rotateBySize_ = rotateBySize;
     maxSize_ = maxSize;
 
@@ -207,7 +206,13 @@ void Logger::setLevel(LogLevel level) {
     minLevel_ = level;
 }
 
+void Logger::setLogPath(std::string filename) {
+    filename_ = filename;
+}
+
 Logger::LogLevel Logger::getLevel() { return minLevel_; }
+
+std::string Logger::getLogPath() { return filename_; }
 
 void Logger::flushFallbackBuffer() {
     if (fallbackUsed_) {

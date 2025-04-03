@@ -2,8 +2,7 @@
 #include <string>
 
 #include "../includes/logger.hpp"
-//#include "../includes/master.hpp"
-//#include "../includes/daemonizer.hpp"
+#include "../includes/master.hpp"
 
 /*!
     \brief Основной контроллер сервиса.
@@ -18,10 +17,8 @@ private:
     void mainLoop();                                                   ///< Функция выполнения процесса
     void printHelp() const;                                            ///< Функци печати справки при ошибках
 
-    //bool run_as_daemon_ = false;
-    LogLevel level_ = LogLevel::INFO;                                  ///< Значение по умолчанию уровня логирования. Может быть переопределено параметром запуска или файлом конфигурации.
-    std::string config_path_ = "./config.json";  ///< Путь к конфигруационному файлу по умолчанию.
+    bool run_as_daemon_ = false;
+    std::string config_path_ = "./config.json";                        ///< Путь к конфигруационному файлу по умолчанию.
     //std::string log_path_ = "/etc/xml_filter_service/config.json";   ///< Путь к конфигруационному файлу по умолчанию.
-    std::string log_path_ = "./config.json";                           ///< Путь к конфигруационному файлу по умолчанию.
-    //Master master_;                                                  ///< 
+    Master master_;                                                    ///< Экземпляр мастер-процесса сервиса.
 };

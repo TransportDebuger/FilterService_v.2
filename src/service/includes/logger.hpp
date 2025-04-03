@@ -41,12 +41,15 @@ public:
         WARNING, ///< Предупреждения
         ERROR ///< Ошибки
     };
-    static void init(const std::string& filename, bool rotateBySize = true, size_t maxSize = DEFAULT_LOGSIZE);
+    static void init(bool rotateBySize, size_t maxSize = DEFAULT_LOGSIZE);
     static void initFallback();
     
     static void setLevel(LogLevel level);
+    static void setLogPath(std::string filename);
     static LogLevel getLevel();
+    static std::string getLogPath();
     static LogLevel strToLogLevel(std::string level);
+
 
     static void debug(const std::string& message);
     static void info(const std::string& message);
@@ -58,14 +61,14 @@ public:
     static void close();
 
 private:
-    static std::ofstream logFile_;  ///< Указатель на лога
+    static std::ofstream logFile_;  ///< Дескриптор лог-файла
     static LogLevel minLevel_;      ///< Минимально заданный уровень логирования сервиса (может переопределяться параметрами CLI и файлом конфигурации)
     static std::mutex mutex_;  
     static std::string filename_;   ///< Имя логфайла
     static bool rotateBySize_;      ///< Признак необходимости ротации лога (задается параметрами CLI или определяется в файле конфигурации)
     static size_t maxSize_;         ///< Максимальный размер лог-файла (игнорируется при ротации)
     static std::stringstream fallbackBuffer_; ///< FallBack буфер сообщений логирования
-    static bool fallbackUsed_;      ///< Признаки спользования fallback логирования
+    static bool fallbackUsed_;      ///< Признак использования fallback логирования
 
     static std::string getCurrentTime(bool forFilename) ;
     static void log(LogLevel level, const std::string& message);

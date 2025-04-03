@@ -1,5 +1,6 @@
 #include "../includes/service_controller.hpp"
 #include "../includes/signal_handler.hpp"
+//#include "../includes/daemonizer.hpp"
 #include <thread>
 
 int ServiceController::run(int argc, char** argv) {
@@ -28,11 +29,11 @@ bool ServiceController::parseArguments(int argc, char** argv) {
             ServiceController::printHelp();
             return false;
         } else if (arg == "--log-level" && i + 1 < argc) {
-            level_ = strToLogLevel(argv[++i]);
+            Logger::setLevel(Logger::strToLogLevel(argv[++i]));
         } else if (arg == "--config" && i + 1 < argc) {
             config_path_ = argv[++i];
         } else if (arg == "--log-file" && i + 1 < argc) {
-            log_path_ = argv[++i];
+            Logger::setLogPath(argv[++i]);
         } else {
             std::cout << "Unknown argument: " + arg << std::endl;
             printHelp();
@@ -45,26 +46,39 @@ bool ServiceController::parseArguments(int argc, char** argv) {
 
 void ServiceController::initialize() {
     SignalHandler::instance();
-    
+
+    //Подумать, нужна ли реализация демонизации сервиса.
     // if (run_as_daemon_) {
-    //     Daemonizer::daemonize();
+    //      Daemonizer::daemonize();
     // }
+
+    if (!master_.start(config_path_)) {
+         throw std::runtime_error("Failed to start master process");
+    }
     
-    // if (!master_.start(config_path_)) {
-    //     throw std::runtime_error("Failed to start master process");
-    // }
-    
-    Logger::init(log_path_);
+    Logger::init();
 }
 
 void ServiceController::mainLoop() {
     while (!SignalHandler::instance().shouldStop()) {
         if (SignalHandler::instance().shouldReload()) {
-    //         master_.reload();
+            if (master_.getState() == Master::State::RUNNING) {
+                try {
+                    master_.reload(); // Перезагрузка конфигурации
+                    SignalHandler::instance().resetFlags();
+                    Logger::info("Service reloaded successfully");
+                } catch (const std::exception& e) {
+                    Logger::error("Service reload failed: " + std::string(e.what()));
+                }
+            } else {
+                Logger::warn("Reload attempted while not in RUNNING state");
+                SignalHandler::instance().resetFlags();
+            }
         }
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    //master_.stop();
+
+    master_.stop(); // Корректная остановка при получении SIGTERM/SIGINT
 }
 
 void ServiceController::printHelp() const {
