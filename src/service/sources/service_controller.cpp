@@ -18,10 +18,11 @@ int ServiceController::run(int argc, char** argv) {
             Logger::close();
             return EXIT_SUCCESS;
         } else {
+            Logger::fatal("Fatal error: Can't parse CLI parameters");
             return EXIT_FAILURE;
         }
     } catch (const std::exception& e) {
-        Logger::error(std::string("Fatal error: ") + e.what());
+        Logger::fatal(std::string("Fatal error: ") + e.what());
         Logger::close();
         return EXIT_FAILURE;
     }
@@ -67,7 +68,7 @@ bool ServiceController::parseArguments(int argc, char** argv) {
 }
 
 /**
- * @brief Функция инициализации систем сервиса.abort
+ * @brief Функция инициализации систем сервиса.
  * 
  * @details Предназначена для последовательной инициализации процессов сервиса.
  *          При вызове функции осуществляется инициализация обработчика системных сигналов SignalHandler, инициализация логера Logger, запуск мастер-процесса Master.
