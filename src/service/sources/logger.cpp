@@ -127,6 +127,7 @@ void Logger::init() {
  *       Потокобезопасна (использует мьютекс mutex_).
  */
 void Logger::initFallback() {
+    std::lock_guard<std::mutex> fallbackLock(fallbackMutex_);
     fallbackUsed_ = true;
 }
 
@@ -258,6 +259,7 @@ void Logger::log(LogLevel level, const std::string& message) {
         case LogLevel::INFO:    color = COLOR_INFO; break;
         case LogLevel::WARNING: color = COLOR_WARN; break;
         case LogLevel::ERROR:   color = COLOR_ERROR; break;
+        case LogLevel::FATAL:   color = COLOR_FATAL; break;
     }
     
     std::string levelStr = logLevelToStr(level);
@@ -354,7 +356,7 @@ void Logger::setLevel(const LogLevel level) {
  * @param [in] filename Имя файла логфайла (std::string)
  * @note Потокобезопасна (использует мьютекс mutex_).
  * @code
- * Logger::ssetLogPath("./app.log"); // Установить лог-файл в теукщей директории с именем app.log
+ * Logger::setLogPath("./app.log"); // Установить лог-файл в теукщей директории с именем app.log
  * @endcode
  */
 void Logger::setLogPath(const std::string& filename) {
@@ -425,22 +427,24 @@ void Logger::flushFallbackBuffer() {
 
 /**
  * @brief Преобразует строку в LogLevel.
- * @param level Строка в нижнем регистре ("debug", "error" и т.д.).
+ * @param level Регистронезависимая строка ("debug", "error" и т.д.).
  * @return Соответствующий уровень LogLevel.
  * @throw std::runtime_error Если передан неизвестный уровень.
  */
 Logger::LogLevel Logger::strToLogLevel(const std::string& level) {
     LogLevel newLevel;
+    std::string lowLevel = level;
+    std::transform(lowLevel.begin(), lowLevel.end(), lowLevel.begin(), ::tolower);
 
-    if (level == "info") {
+    if (lowLevel == "info") {
         newLevel = LogLevel::INFO;
-    } else if (level == "debug") {
+    } else if (lowLevel == "debug") {
         newLevel = LogLevel::DEBUG;
-    } else if (level == "warning") {
+    } else if (lowLevel == "warning") {
         newLevel = LogLevel::WARNING;
-    } else if (level == "error") {
+    } else if (lowLevel == "error") {
         newLevel = LogLevel::ERROR;
-    }  else if (level == "fatal") {
+    }  else if (lowLevel == "fatal") {
         newLevel = LogLevel::FATAL;
     } else {
         throw std::runtime_error("Fatal error: Unknown type of log level. Run service with --help to get usage hints.");
