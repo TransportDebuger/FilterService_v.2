@@ -101,12 +101,6 @@ size_t Logger::maxSize_ = DEFAULT_LOGSIZE;
 Logger::LogLevel Logger::minLevel_ = Logger::LogLevel::DEBUG;
 bool Logger::fallbackUsed_ = false;
 
-/**
- * @brief Инициализирует логгер, открывая лог-файл для записи.
- * @details Если файл не может быть открыт, активирует fallback-режим.
- * @throw std::runtime_error Если не удалось открыть файл и активировать fallback.
- * @note Потокобезопасна (использует мьютекс mutex_).
- */
 void Logger::init() {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -121,21 +115,11 @@ void Logger::init() {
     }
 }
 
-/**
- * @brief Активирует fallback-режим, перенаправляя логи в буфер.
- * @note Вызывается автоматически при ошибке в init(). 
- *       Потокобезопасна (использует мьютекс mutex_).
- */
 void Logger::initFallback() {
     std::lock_guard<std::mutex> fallbackLock(fallbackMutex_);
     fallbackUsed_ = true;
 }
 
-/**
- * @brief Корректно завершает работу логгера.
- * @details Закрывает файл и сбрасывает fallback-буфер.
- * @note Потокобезопасна. Использует mutex_ и fallbackMutex_.
- */
 void Logger::close() {
     std::lock_guard<std::mutex> lock(mutex_);
     
@@ -153,11 +137,6 @@ void Logger::close() {
     }
 }
 
-/**
- * @brief Проверяет необходимость ротации файла.
- * @return true - если размер файла превышает maxSize_ и ротация включена.
- * @note Использует stat(). Потокобезопасна (вызывается внутри log()).
- */
 bool Logger::needsRotation() {
     if (!rotateBySize_) return false;
 
@@ -168,13 +147,6 @@ bool Logger::needsRotation() {
     return static_cast<size_t>(statBuf.st_size) >= maxSize_;
 }
 
-/**
- * @brief Выполняет ротацию лог-файла.
- * @details Переименовывает текущий файл, создаёт новый. 
- *          При ошибках пытается восстановить работоспособность.
- * @note Вызывается из log(). Использует mutex_.
- * @warning Не вызывайте этот метод напрямую.
- */
 void Logger::rotateLog() {
     
     if (!logFile_.is_open()) {
@@ -218,12 +190,6 @@ void Logger::rotateLog() {
     }
 }
 
-/**
- * @brief Генерирует строку с текущим временем.
- * @param forFilename true - формат для имени файла (ГГГГММДД_ЧЧММСС), 
- *                    false - для записи в лог (ГГГГ-ММ-ДД ЧЧ:ММ:СС).
- * @return Строка с временной меткой.
- */
 std::string Logger::getCurrentTime(bool forFilename) {
     auto now = std::chrono::system_clock::now();
     auto now_time = std::chrono::system_clock::to_time_t(now);
@@ -238,16 +204,6 @@ std::string Logger::getCurrentTime(bool forFilename) {
     return oss.str();
 }
 
-/**
- * @brief Основной метод записи лога.
- * @param [in] level Уровень важности сообщения (LogLevel).
- * @param [in] message Текст сообщения (std::string).
- * @details Выполняет:
- *          1. Проверку уровня.
- *          2. Ротацию логов (при необходимости).
- *          3. Запись в файл/консоль/fallback-буфер.
- * @note Потокобезопасна (использует мьютекс mutex_).
- */
 void Logger::log(LogLevel level, const std::string& message) {
     std::lock_guard<std::mutex> lock(mutex_);
     
@@ -307,89 +263,26 @@ void Logger::log(LogLevel level, const std::string& message) {
     }
 }
 
-/**
- * @brief Записывает сообщение уровня DEBUG.
- * @param message Текст сообщения.
- * @note Потокобезопасна. Обёртка вокруг log(LogLevel::DEBUG, message).
- */
 void Logger::debug(const std::string& message) { log(LogLevel::DEBUG, message); }
-/**
- * @brief Записывает сообщение уровня INFO.
- * @param message Текст сообщения.
- * @note Потокобезопасна. Обёртка вокруг log(LogLevel::INFO, message).
- */
+
 void Logger::info(const std::string& message) { log(LogLevel::INFO, message); }
-/**
- * @brief Записывает сообщение уровня WARNING.
- * @param message Текст сообщения.
- * @note Потокобезопасна. Обёртка вокруг log(LogLevel::WARNING, message).
- */
+
 void Logger::warn(const std::string& message) { log(LogLevel::WARNING, message); }
-/**
- * @brief Записывает сообщение уровня ERROR.
- * @param [in] message Текст сообщения.
- * @note Потокобезопасна. Обёртка вокруг log(LogLevel::ERROR, message).
- */
+
 void Logger::error(const std::string& message) { log(LogLevel::ERROR, message); }
-/**
- * @brief Записывает сообщение уровня FATAL.
- * @param [in] message Текст сообщения.
- * @note Потокобезопасна. Обёртка вокруг log(LogLevel::FATAL, message).
- */
+
 void Logger::fatal(const std::string& message) { log(LogLevel::FATAL, message); }
 
-/**
- * @brief Устанавливает минимальный уровень логирования.
- * @param [in] level Уровень (LogLevel), ниже которого сообщения игнорируются.
- * @note Потокобезопасна (использует мьютекс mutex_).
- * @code
- * Logger::setLevel(Logger::LogLevel::INFO); // Игнорировать DEBUG
- * @endcode
- */
 void Logger::setLevel(const LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     minLevel_ = level;
 }
 
-/**
- * @brief Устанавливает имя лог-файла.
- * @param [in] filename Имя файла логфайла (std::string)
- * @note Потокобезопасна (использует мьютекс mutex_).
- * @code
- * Logger::setLogPath("./app.log"); // Установить лог-файл в теукщей директории с именем app.log
- * @endcode
- */
 void Logger::setLogPath(const std::string& filename) {
     std::lock_guard<std::mutex> lock(mutex_);
     filename_ = filename;
 }
 
-/**
- * @brief Включает или отключает ротацию лог-файлов по размеру.
- * @param [in] isRotated Признак необходимости ротации:
- *                       - true: ротация включена;
- *                       - false: ротация отключена.
- * @param [in] logSize Максимальный размер файла (в байтах), при достижении которого выполняется ротация.
- *                     Значение по умолчанию: DEFAULT_LOGSIZE (10 МБ).
- * @note Потокобезопасна (использует мьютекс mutex_).
- * 
- * @details При активации ротации:
- *          - Лог-файл будет переименован и создан заново при превышении logSize.
- *          - Старые файлы получают суффикс в формате ГГГГММДД_ЧЧММСС.
- *          - Если isRotated = false, параметр logSize игнорируется.
- * 
- * @warning Для корректной работы:
- *          - Ротация не поддерживается в fallback-режиме.
- *          - Убедитесь, что файловая система поддерживает операцию rename().
- * 
- * @code
- * // Включить ротацию при достижении 5 МБ
- * Logger::setLogRotation(true, 5 * 1024 * 1024);
- * @endcode
- * 
- * @see Logger::rotateLog()
- * @see Logger::needsRotation()
- */
 void Logger::setLogRotation(bool isRotated, size_t logSize) {
     rotateBySize_ = isRotated;
     maxSize_ = logSize;
@@ -399,24 +292,10 @@ void Logger::setLogSize(size_t logSize) {
     maxSize_ = logSize;
 }
 
-/**
- * @brief Возвращает текущий минимальный уровень логирования.
- * @return Текущий уровень LogLevel.
- * @note Потокобезопасна. Использует мьютекс mutex_.
- */
 Logger::LogLevel Logger::getLevel() { return minLevel_; }
 
-/**
- * @brief Возвращает текущий путь к лог-файлу.
- * @return Путь в формате std::string.
- * @note Потокобезопасна. Использует мьютекс mutex_.
- */
 std::string Logger::getLogPath() { return filename_; }
 
-/**
- * @brief Немедленно сбрасывает содержимое fallback-буфера в stderr.
- * @note Потокобезопасна. Использует fallbackMutex_.
- */
 void Logger::flushFallbackBuffer() {
     if (fallbackUsed_) {
         std::cerr << fallbackBuffer_.str();
@@ -425,12 +304,6 @@ void Logger::flushFallbackBuffer() {
     }
 }
 
-/**
- * @brief Преобразует строку в LogLevel.
- * @param level Регистронезависимая строка ("debug", "error" и т.д.).
- * @return Соответствующий уровень LogLevel.
- * @throw std::runtime_error Если передан неизвестный уровень.
- */
 Logger::LogLevel Logger::strToLogLevel(const std::string& level) {
     LogLevel newLevel;
     std::string lowLevel = level;
@@ -453,11 +326,6 @@ Logger::LogLevel Logger::strToLogLevel(const std::string& level) {
     return newLevel;
 }
 
-/**
- * @brief Преобразует LogLevel в строковое представление.
- * @param [in] level Уровень логирования (Logger::LogLevel).
- * @return Строка в верхнем регистре ("DEBUG", "INFO" и т.д.).
- */
 std::string Logger::logLevelToStr(Logger::LogLevel level) { 
     std::string strLevel = "";
     switch (level) {
