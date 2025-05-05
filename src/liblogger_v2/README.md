@@ -7,6 +7,12 @@ cmake --build . --config Release
 cmake --install .
 ```
 
+## Сборка тестов
+
+```
+cmake .. -DBUILD_TESTING=ON
+```
+
 ## Использование в других проектах (CMake)
 
 ```
