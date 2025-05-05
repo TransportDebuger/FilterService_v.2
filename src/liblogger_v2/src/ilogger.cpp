@@ -5,7 +5,6 @@
 #include <iostream>
 
 bool stc::TimeFormatter::setGlobalFormat(const std::string& fmt) {
-    std::lock_guard<std::mutex> lock(formatMutex_);
         try {
             auto now = std::chrono::system_clock::now();
             format(now);
@@ -19,7 +18,6 @@ bool stc::TimeFormatter::setGlobalFormat(const std::string& fmt) {
 }
 
 std::string stc::TimeFormatter::format(const std::chrono::system_clock::time_point& tp) {
-    std::lock_guard<std::mutex> lock(formatMutex_);
     try {
         auto now_time = std::chrono::system_clock::to_time_t(tp);
         std::tm now_tm;

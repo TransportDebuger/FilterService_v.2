@@ -37,7 +37,6 @@ namespace stc {
     
         private:
             inline static std::string globalFormat_ = "%Y-%m-%d %T";
-            inline static std::mutex formatMutex_;
     };
 
     class ILogger {
