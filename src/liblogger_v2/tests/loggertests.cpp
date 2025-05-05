@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "stc/consolelogger.hpp"
+#include "stc/syncfilelogger.hpp"
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -73,6 +74,16 @@ TEST_F(LoggerTest, ThreadSafety) {
 
     std::string output = testing::internal::GetCapturedStdout();
     EXPECT_EQ(counter, kNumThreads * kMessagesPerThread);
+}
+
+TEST(FileLoggerTest, BasicFileWrite) {
+    stc::FileLogger::instance().init(stc::LogLevel::INFO);
+    testing::internal::CaptureStdout();
+    stc::FileLogger::instance().info("Тест записи в файл");
+    
+    std::ifstream file("app.log");
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    EXPECT_TRUE(content.find("Тест записи в файл") != std::string::npos);
 }
 
 // Точка входа

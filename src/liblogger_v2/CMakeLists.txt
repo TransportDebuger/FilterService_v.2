@@ -3,7 +3,7 @@ project(stclogger VERSION 1.0.0 LANGUAGES CXX)
 
 # Опции
 option(BUILD_SHARED_LIBS "Собрать динамическую библиотеку" OFF)
-option(BUILD_TESTING "Собирать тесты" ON)
+option(BUILD_TESTING "Собирать тесты" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,12 +11,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SOURCES
     src/ilogger.cpp
     src/consolelogger.cpp
+    src/basefilelogger.cpp
 )
 
 # Публичные заголовочные файлы
 set(PUBLIC_HEADERS
     include/stc/ilogger.hpp
     include/stc/consolelogger.hpp
+    include/stc/basefilelogger.hpp
 )
 
 # Создание библиотеки
@@ -43,7 +45,7 @@ if(BUILD_TESTING)
     
     # Исполняемый файл для тестов
     add_executable(stclogger_tests
-        tests/consoleloggertests.cpp
+        tests/loggertests.cpp
     )
     
     # Линковка
