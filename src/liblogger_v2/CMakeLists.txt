@@ -78,13 +78,13 @@ include(CMakePackageConfigHelpers)
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stclogger-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/stclogger-config.cmake
-    INSTALL_DESTINATION lib/cmake/stclogger
+    INSTALL_DESTINATION /opt/lib/stclogger
 )
 
 install(
     EXPORT stclogger-targets
     FILE stclogger-targets.cmake
-    DESTINATION lib/cmake/stclogger
+    DESTINATION /opt/lib/stclogger
 )
 
 install(
