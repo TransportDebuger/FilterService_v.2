@@ -17,42 +17,43 @@ void stc::ConsoleLogger::setLogLevel(stc::LogLevel level) {
   currentLevel_.store(level, std::memory_order_release);
 }
 
-void stc::ConsoleLogger::setRotationConfig(const stc::RotationConfig& config) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  rotationConfig_ = config;
-}
-
-stc::RotationConfig stc::ConsoleLogger::getRotationConfig() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return rotationConfig_;
-}
-
 void stc::ConsoleLogger::flush() {
   std::lock_guard<std::mutex> lock(mutex_);
   std::cout.flush();
   std::cerr.flush();
 }
 
-void stc::ConsoleLogger::log(stc::LogLevel level, const std::string& message) {
-  std::lock_guard<std::mutex> lock(mutex_);
+void stc::ConsoleLogger::log(LogLevel level, const std::string& message) {
   if (shouldSkipLog(level)) return;
 
-  auto now = std::chrono::system_clock::now();
-  std::string timestamp = TimeFormatter::format(now);
+    std::string formattedMsg;
+    try {
+        auto now = std::chrono::system_clock::now();
+        std::string timestamp = TimeFormatter::format(now);
+        std::ostringstream formatted;
+        formatted << timestamp << " [" << leveltoString(level) << "] " << message;
+        formattedMsg = formatted.str();
+    } catch (const std::exception& e) {
+        formattedMsg = "[LOGGER ERROR: " + (std::string)e.what() + "]";
+    } catch (...) {
+        formattedMsg = "[LOGGER ERROR: unknown exception]";
+    }
 
-  std::ostringstream formatted;
-  formatted << timestamp << " [" << stc::leveltoString(level) << "] "
-            << message;
-
-  auto& stream = std::cout;
-  if (!stream.good()) {
-    std::cerr << "Ошибка: поток вывода недоступен" << std::endl;
-    return;
-  }
-
-  setConsoleColor(level);
-  std::cout << formatted.str() << std::endl;
-  resetConsoleColor();
+    try {
+        std::lock_guard lock(mutex_);
+        setConsoleColor(level);
+        std::cout << formattedMsg << std::endl;
+        resetConsoleColor();
+        std::cout.flush();
+    } catch (const std::exception& e) {
+        std::lock_guard lock(mutex_);
+        resetConsoleColor();
+        std::cerr << "[LOGGER ERROR: " << e.what() << "] " << formattedMsg << std::endl;
+    } catch (...) {
+        std::lock_guard lock(mutex_);
+        resetConsoleColor();
+        std::cerr << "[LOGGER ERROR: unknown exception] " << formattedMsg << std::endl;
+    }
 }
 
 bool stc::ConsoleLogger::shouldSkipLog(LogLevel level) const {

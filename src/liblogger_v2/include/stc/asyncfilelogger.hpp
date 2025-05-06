@@ -9,13 +9,13 @@ namespace stc {
 class AsyncFileLogger : public BaseFileLogger {
 public:
     static AsyncFileLogger& instance();
-    ~AsyncFileLogger();
 
 protected:
     void writeToFile(const std::string& formattedMessage) override;
 
 private:
-    AsyncFileLogger();
+   AsyncFileLogger();
+    ~AsyncFileLogger();
     void processQueue();
 
     std::queue<std::string> logQueue_;
@@ -23,6 +23,7 @@ private:
     std::condition_variable queueCV_;
     std::thread workerThread_;
     std::atomic<bool> running_{true};
+    bool warnedAboutFallback_ = false;
 };
 
 } // namespace stc

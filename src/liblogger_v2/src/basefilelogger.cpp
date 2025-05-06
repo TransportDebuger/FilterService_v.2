@@ -1,5 +1,6 @@
 #include "stc/basefilelogger.hpp"
 
+#include <iostream>
 #include <chrono>
 #include <iomanip>
 
@@ -51,41 +52,114 @@ bool BaseFileLogger::shouldSkipLog(LogLevel level) const {
 }
 
 void BaseFileLogger::reopenFiles() {
-  std::lock_guard<std::mutex> lock(mutex_);
-  mainLogFile_.open(mainLogPath_, std::ios::app);
-  if (!mainLogFile_.is_open()) {
-    fallbackLogFile_.open(fallbackLogPath_, std::ios::app);
+  std::lock_guard lock(mutex_);
+  try {
+      // Закрываем старые файлы, если они были открыты
+      if (mainLogFile_.is_open()) {
+          mainLogFile_.close();
+      }
+      if (fallbackLogFile_.is_open()) {
+          fallbackLogFile_.close();
+      }
+
+      // Открываем основной лог-файл
+      mainLogFile_.open(mainLogPath_, std::ios::app);
+      if (!mainLogFile_.is_open()) {
+          std::cerr << "[LOGGER ERROR] Cannot open main log file: " << mainLogPath_ << std::endl;
+
+          // Открываем резервный лог-файл
+          fallbackLogFile_.open(fallbackLogPath_, std::ios::app);
+          if (!fallbackLogFile_.is_open()) {
+              std::cerr << "[LOGGER ERROR] Cannot open fallback log file: " << fallbackLogPath_ << std::endl;
+          }
+      }
+  } catch (const std::exception& e) {
+      std::cerr << "[LOGGER ERROR] Exception during file open: " << e.what() << std::endl;
+  } catch (...) {
+      std::cerr << "[LOGGER ERROR] Unknown exception during file open." << std::endl;
   }
 }
 
 void BaseFileLogger::rotateIfNeeded(const std::string& message) {
   namespace fs = std::filesystem;
-  std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard lock(mutex_);
+    try {
+        if (!rotationConfig_.enabled || !mainLogFile_.is_open()) return;
 
-  if (!rotationConfig_.enabled || !mainLogFile_.is_open()) return;
+        bool needRotate = false;
+        if (rotationConfig_.type == RotationType::SIZE) {
+            auto currentSize = fs::file_size(mainLogPath_);
+            if (currentSize + message.size() > rotationConfig_.maxFileSizeBytes) {
+                needRotate = true;
+            }
+        }
+        if (rotationConfig_.type == RotationType::TIME) {
+            auto now = std::chrono::system_clock::now();
+            if (now - rotationConfig_.lastRotationTime > rotationConfig_.rotationInterval) {
+                needRotate = true;
+                rotationConfig_.lastRotationTime = now;
+            }
+        }
+        if (!needRotate) return;
 
-  // Ротация по размеру
-  if (rotationConfig_.type == RotationType::SIZE) {
-    auto currentSize = fs::file_size(mainLogPath_);
-    if (currentSize + message.size() > rotationConfig_.maxFileSizeBytes) {
-      mainLogFile_.close();
-      fs::rename(mainLogPath_, mainLogPath_ + ".1");
-      mainLogFile_.open(mainLogPath_, std::ios::app);
+        mainLogFile_.close();
+
+        // Шаг 1: Переименовать исходный файл во временный (атомарно)
+        std::string tempName = mainLogPath_ + ".rotating";
+        fs::rename(mainLogPath_, tempName);
+
+        // Шаг 2: Открыть новый файл для логирования
+        mainLogFile_.open(mainLogPath_, std::ios::app);
+        if (!mainLogFile_.is_open()) {
+            std::cerr << "[LOGGER ERROR] Cannot open new log file after rotation: " << mainLogPath_ << std::endl;
+            // Попробовать открыть fallback-файл или вернуть ошибку
+            return;
+        }
+
+        // Шаг 3: Переименовать временный файл в архивное имя
+        std::string rotatedName;
+        if (rotationConfig_.type == RotationType::SIZE) {
+            rotatedName = mainLogPath_ + ".1";
+        } else if (rotationConfig_.type == RotationType::TIME) {
+            auto now = std::chrono::system_clock::now();
+            rotatedName = mainLogPath_ + "_" + TimeFormatter::format(now);
+        } else {
+            rotatedName = mainLogPath_ + ".old";
+        }
+        fs::rename(tempName, rotatedName);
+    } catch (const std::exception& e) {
+        std::cerr << "[LOGGER ERROR] Exception during atomic log rotation: " << e.what() << std::endl;
     }
-  }
+}
 
-  // Ротация по времени
-  if (rotationConfig_.type == RotationType::TIME) {
-    auto now = std::chrono::system_clock::now();
-    if (now - rotationConfig_.lastRotationTime >
-        rotationConfig_.rotationInterval) {
-      mainLogFile_.close();
-      std::string newName = mainLogPath_ + "_" + TimeFormatter::format(now);
-      fs::rename(mainLogPath_, newName);
-      rotationConfig_.lastRotationTime = now;
-      mainLogFile_.open(mainLogPath_, std::ios::app);
-    }
+void BaseFileLogger::setMainLogPath(const std::string& path) {
+  if (mainLogPath_ != path) {
+      {
+        std::lock_guard lock(mutex_);
+        mainLogPath_ = path;
+      }
+      reopenFiles();
   }
+}
+
+void BaseFileLogger::setFallbackLogPath(const std::string& path) {
+  if (fallbackLogPath_ != path) {
+      {
+        std::lock_guard lock(mutex_);
+        fallbackLogPath_ = path;
+      }
+      reopenFiles();
+  }
+}
+
+std::string BaseFileLogger::getMainLogPath() const {
+  std::lock_guard lock(mutex_);
+  return mainLogPath_;
+}
+
+std::string BaseFileLogger::getFallbackLogPath() const {
+  std::lock_guard lock(mutex_);
+  return fallbackLogPath_;
 }
 
 }  // namespace stc

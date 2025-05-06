@@ -21,8 +21,6 @@ class ConsoleLogger : public ILogger {
 
   void init(const LogLevel level) override;
   void setLogLevel(LogLevel level) override;
-  void setRotationConfig(const RotationConfig& config) override;
-  RotationConfig getRotationConfig() const override;
   void flush() override;
 
  protected:
@@ -35,6 +33,6 @@ class ConsoleLogger : public ILogger {
   void setConsoleColor(LogLevel level);
   void resetConsoleColor();
   mutable std::mutex mutex_;
-  RotationConfig rotationConfig_;  // Не используется
 };
+
 }  // namespace stc

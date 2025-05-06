@@ -1,5 +1,7 @@
 #include "stc/asyncfilelogger.hpp"
 
+#include <iostream>
+
 namespace stc {
 
 AsyncFileLogger& AsyncFileLogger::instance() {
@@ -8,7 +10,7 @@ AsyncFileLogger& AsyncFileLogger::instance() {
 }
 
 AsyncFileLogger::AsyncFileLogger() {
-    workerThread_ = std::thread(&AsyncFileLogger::processQueue, this);
+    workerThread_ = std::thread(&AsyncFileLogger::processQueue, this); 
 }
 
 AsyncFileLogger::~AsyncFileLogger() {
@@ -21,16 +23,18 @@ AsyncFileLogger::~AsyncFileLogger() {
 }
 
 void AsyncFileLogger::writeToFile(const std::string& formattedMessage) {
-    std::lock_guard<std::mutex> lock(queueMutex_);
-    logQueue_.push(formattedMessage);
+    {
+        std::lock_guard lock(queueMutex_);
+        logQueue_.push(formattedMessage);
+    }
     queueCV_.notify_one();
 }
 
 void AsyncFileLogger::processQueue() {
     while (running_ || !logQueue_.empty()) {
-        std::unique_lock<std::mutex> lock(queueMutex_);
-        queueCV_.wait(lock, [this]() { 
-            return !logQueue_.empty() || !running_; 
+        std::unique_lock lock(queueMutex_);
+        queueCV_.wait(lock, [this] {
+            return !logQueue_.empty() || !running_;
         });
 
         while (!logQueue_.empty()) {
@@ -38,14 +42,44 @@ void AsyncFileLogger::processQueue() {
             logQueue_.pop();
             lock.unlock();
 
-            // Запись в файл через базовый класс
-            {
-                std::lock_guard<std::mutex> fileLock(mutex_);
+            try {
+                std::lock_guard fileLock(mutex_);
                 if (mainLogFile_.is_open()) {
                     mainLogFile_ << msg;
+                    mainLogFile_.flush();
+                    warnedAboutFallback_ = false;
                 } else if (fallbackLogFile_.is_open()) {
+                    if (!warnedAboutFallback_) {
+                        std::cerr << "[LOGGER WARNING] Main log file unavailable, switching to fallback log file: "
+                                  << fallbackLogPath_ << std::endl;
+                        warnedAboutFallback_ = true;
+                    }
                     fallbackLogFile_ << msg;
+                    fallbackLogFile_.flush();
+                } else {
+                    std::cerr << "[LOGGER ERROR] No log file is open for writing! Attempting to reopen files..." << std::endl;
+                    reopenFiles();
+                    // Повторная попытка
+                    if (mainLogFile_.is_open()) {
+                        mainLogFile_ << msg;
+                        mainLogFile_.flush();
+                        warnedAboutFallback_ = false;
+                    } else if (fallbackLogFile_.is_open()) {
+                        if (!warnedAboutFallback_) {
+                            std::cerr << "[LOGGER WARNING] Main log file unavailable after reopen, switching to fallback log file: "
+                                      << fallbackLogPath_ << std::endl;
+                            warnedAboutFallback_ = true;
+                        }
+                        fallbackLogFile_ << msg;
+                        fallbackLogFile_.flush();
+                    } else {
+                        std::cerr << "[LOGGER ERROR] Still no log file is open for writing after reopen!" << std::endl;
+                    }
                 }
+            } catch (const std::exception& e) {
+                std::cerr << "[LOGGER ERROR] Exception during async file write: " << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "[LOGGER ERROR] Unknown exception during async file write." << std::endl;
             }
 
             lock.lock();
