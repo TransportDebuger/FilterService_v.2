@@ -1,0 +1,25 @@
+# Log-files
+*.log
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+*.bin
+*.sys
+ 
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+ 
+# Executables
+*.exe
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.apk
+*.out
