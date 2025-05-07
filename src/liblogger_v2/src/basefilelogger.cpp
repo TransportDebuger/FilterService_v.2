@@ -81,7 +81,7 @@ void BaseFileLogger::reopenFiles() {
 }
 
 void BaseFileLogger::rotateIfNeeded(const std::string& message) {
-  namespace fs = std::filesystem;
+    namespace fs = std::filesystem;
     std::lock_guard lock(mutex_);
     try {
         if (!rotationConfig_.enabled || !mainLogFile_.is_open()) return;
