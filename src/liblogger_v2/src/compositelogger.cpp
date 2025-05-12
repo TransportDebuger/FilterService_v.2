@@ -2,6 +2,11 @@
 
 namespace stc {
 
+    CompositeLogger& CompositeLogger::instance() {
+        static CompositeLogger instance;
+        return instance;
+    }
+
     void CompositeLogger::addLogger(const std::shared_ptr<ILogger>& logger) {
         loggers_.push_back(logger);
     }

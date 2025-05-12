@@ -9,7 +9,13 @@ namespace stc {
 
 class CompositeLogger : public ILogger {
 public:
-    CompositeLogger() = default;
+static CompositeLogger& instance();
+
+// Запрет копирования и перемещения
+CompositeLogger(const CompositeLogger&) = delete;
+CompositeLogger& operator=(const CompositeLogger&) = delete;  
+
+  CompositeLogger() = default;
     CompositeLogger(std::initializer_list<std::shared_ptr<ILogger>> loggers)
         : loggers_(loggers) {}
 
@@ -29,6 +35,7 @@ public:
 
 protected:
     bool shouldSkipLog(LogLevel level) const override;
+    void log(LogLevel, const std::string&) override;
 
 private:
     std::vector<std::shared_ptr<ILogger>> loggers_;
