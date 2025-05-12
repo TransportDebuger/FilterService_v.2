@@ -7,7 +7,7 @@ option(BUILD_TESTING "Собирать тесты" ON)
 option(ENABLE_COVERAGE "Включить покрытие кода (gcov)" OFF)
 
 # Настройки компиляции
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (ENABLE_COVERAGE)
@@ -22,6 +22,7 @@ set(SOURCES
     src/basefilelogger.cpp
     src/syncfilelogger.cpp
     src/asyncfilelogger.cpp
+    src/compositelogger.cpp
 )
 
 # Публичные заголовочные файлы
@@ -32,6 +33,7 @@ set(PUBLIC_HEADERS
     include/stc/syncfilelogger.hpp
     include/stc/asyncfilelogger.hpp
     include/stc/irotatablelogger.hpp
+    include/stc/compositelogger.hpp
 )
 
 # Создание библиотеки
