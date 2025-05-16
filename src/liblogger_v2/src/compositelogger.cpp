@@ -59,6 +59,8 @@ namespace stc {
         }
     }
 
+    void CompositeLogger::log(LogLevel level, const std::string&) {}
+
     bool CompositeLogger::shouldSkipLog(LogLevel level) const {
         // CompositeLogger логирует всегда, делегирует фильтрацию вложенным логгерам
         return false;

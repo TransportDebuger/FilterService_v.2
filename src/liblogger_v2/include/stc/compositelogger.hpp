@@ -12,10 +12,10 @@ public:
 static CompositeLogger& instance();
 
 // Запрет копирования и перемещения
-CompositeLogger(const CompositeLogger&) = delete;
-CompositeLogger& operator=(const CompositeLogger&) = delete;  
+// CompositeLogger(const CompositeLogger&) = delete;
+// CompositeLogger& operator=(const CompositeLogger&) = delete;  
 
-  CompositeLogger() = default;
+    CompositeLogger() = default;
     CompositeLogger(std::initializer_list<std::shared_ptr<ILogger>> loggers)
         : loggers_(loggers) {}
 
@@ -35,9 +35,10 @@ CompositeLogger& operator=(const CompositeLogger&) = delete;
 
 protected:
     bool shouldSkipLog(LogLevel level) const override;
-    void log(LogLevel, const std::string&) override;
+    void log(LogLevel level, const std::string&) override;
 
 private:
+    ~CompositeLogger() = default;
     std::vector<std::shared_ptr<ILogger>> loggers_;
 };
 

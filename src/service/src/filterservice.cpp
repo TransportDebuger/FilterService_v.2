@@ -8,7 +8,7 @@
  * точки входа в программу.
  */
 
-#include "service_controller.hpp"
+#include "../include/service_controller.hpp"
 
 int main(int argc, char** argv) {
   ServiceController controller;
