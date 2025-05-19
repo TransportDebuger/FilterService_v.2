@@ -35,7 +35,7 @@
 #include "stc/compositelogger.hpp"
 #include "stc/consolelogger.hpp"
 #include "stc/asyncfilelogger.hpp"
-// #include "../includes/master.hpp"
+#include "../include/master.hpp"
 
 /**
  * @class ServiceController
@@ -133,6 +133,8 @@ class ServiceController {
   void initialize();
 
   void initLogger();
+
+  void setupSignalHandlers();
   
   /**
    * @brief Главный цикл работы сервиса
@@ -176,7 +178,23 @@ class ServiceController {
    */
   std::string config_path_ = "/etc/stc/xmlfilter/config.json";
 
-  std::optional<std::string> cliLogLevel_; //Уровень логгирования, задаваемый параметрами командной строки. Переопределяет уровни логгирования заданные в конфигурационном файле.
+  /**
+   * @brief Уровень логгирования, задаваемый параметрами командной строки
+   * @details Хранит уровень логгирования, задаваемый параметрами командной 
+   *          строки приложения.
+   * @note Заданный уровень логирования имеет высший приоритет и не может 
+   *       быть переопределен параметрами, заданными в конфигурационном файле 
+   *       приложения
+   */
+  std::optional<std::string> cliLogLevel_;
+
+  /**
+   * @brief Перечисление логеров, используемых приложением.
+   * @details Вектор хранит строковые значения, определяющие типы логгеров,
+   *          Используемых приложением.
+   * @note Заданные способы логирования имеют высший приоритет и не могут быть 
+   *       переопределены в конфигурационном файле приложения. 
+   */
   std::vector<std::string> loggerTypes_; // Задает типы логгеров, игнорирует параметры логгеров, заданные в конфигурационном файле.
 
   /**
@@ -189,5 +207,7 @@ class ServiceController {
    * внутренний мьютекс.
    * @see Master
    */
-  // Master master_;
+  Master master_;
+
+  bool run_as_daemon_ = false;
 };

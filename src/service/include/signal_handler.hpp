@@ -1,11 +1,10 @@
 #pragma once
 
-#include <iostream>
-#include <csignal>
-#include <map>
 #include <functional>
-#include <atomic>
+#include <map>
 #include <mutex>
+#include <atomic>
+#include <csignal>
 
 class SignalHandler {
 public:

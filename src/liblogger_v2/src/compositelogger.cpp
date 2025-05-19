@@ -1,5 +1,7 @@
 #include "stc/compositelogger.hpp"
 
+static_assert(std::is_base_of<stc::ILogger, stc::CompositeLogger>::value, "CompositeLogger must be derived from ILogger");
+
 namespace stc {
 
     CompositeLogger& CompositeLogger::instance() {
@@ -62,7 +64,6 @@ namespace stc {
     void CompositeLogger::log(LogLevel level, const std::string&) {}
 
     bool CompositeLogger::shouldSkipLog(LogLevel level) const {
-        // CompositeLogger логирует всегда, делегирует фильтрацию вложенным логгерам
         return false;
     }
 }

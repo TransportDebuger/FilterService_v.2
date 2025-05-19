@@ -1,6 +1,7 @@
 #include "../include/configmanager.hpp"
 
 #include <fstream>
+#include <stdexcept>
 
     ConfigManager& ConfigManager::instance() {
         static ConfigManager instance;

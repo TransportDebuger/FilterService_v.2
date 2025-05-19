@@ -1,8 +1,9 @@
-#include "../include/signal_handler.hpp"
-#include "stc/compositelogger.hpp"
 #include <iostream>
 #include <csignal>
 #include <stdexcept>
+
+#include "../include/signal_handler.hpp"
+#include "stc/compositelogger.hpp"
 
 SignalHandler& SignalHandler::instance() {
     static SignalHandler instance;
@@ -136,17 +137,17 @@ void SignalHandler::handleSignal(int signum) noexcept {
 
 void SignalHandler::registerDefaultHandlers() {
     registerHandler(SIGTERM, [](int signum) {
-        // Logger::info("Received SIGTERM signal. Shutting down...");
+        stc::CompositeLogger::instance().debug("ServiceController: Received signal " + std::to_string(signum));
         SignalHandler::instance().stop_flag_.store(true);
     });
 
     registerHandler(SIGINT, [](int signum) {
-        // Logger::info("Received SIGINT signal. Shutting down...");
+        stc::CompositeLogger::instance().debug("ServiceController: Received signal " + std::to_string(signum));
         SignalHandler::instance().stop_flag_.store(true);
     });
 
     registerHandler(SIGHUP, [](int signum) {
-        // Logger::info("Received SIGHUP signal. Reloading configuration...");
+        stc::CompositeLogger::instance().debug("ServiceController: Received signal " + std::to_string(signum));
         SignalHandler::instance().reload_flag_.store(true);
     });
 }
