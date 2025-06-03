@@ -1,85 +1,54 @@
 #include "../include/configmanager.hpp"
-
-#include <fstream>
 #include <stdexcept>
 
-    ConfigManager& ConfigManager::instance() {
-        static ConfigManager instance;
-        return instance;
+ConfigManager& ConfigManager::instance() {
+    static ConfigManager instance;
+    return instance;
+}
+
+void ConfigManager::initialize(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    
+    try {
+        baseConfig_ = loader_.loadFromFile(filename);
+        envProcessor_.process(baseConfig_);
+        
+        if(!validator_.validateRoot(baseConfig_)) {
+            throw std::runtime_error("Invalid config structure");
+        }
+        
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("Config initialization failed: ") + e.what());
+    }
+}
+
+nlohmann::json ConfigManager::getMergedConfig(const std::string& env) const {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    
+    if (auto cached = cache_.getCached(env); !cached.empty()) {
+        return cached;
     }
 
-    void ConfigManager::loadFromFile(const std::string& filename) {
-        std::lock_guard lock(mutex_);
-    
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            throw std::runtime_error("Cannot open config file: " + filename);
-        }
-    
-        nlohmann::json newConfig;
-        file >> newConfig;
-    
-        if (!validate(newConfig)) {
-            throw std::runtime_error("Config validation failed");
-        }
-    
-        config_ = std::move(newConfig);
-        valid_ = true;
-        currentConfigFile_ = filename;
+    if (!baseConfig_.contains("environments") || !baseConfig_["environments"].contains(env)) {
+        throw std::runtime_error("Environment '" + env + "' not found");
     }
 
-    void ConfigManager::reload() {
-        std::lock_guard lock(mutex_);
+    nlohmann::json merged = baseConfig_["defaults"];
+    merged.merge_patch(baseConfig_["environments"][env]);
     
-        if (currentConfigFile_.empty()) {
-            throw std::runtime_error("No config file loaded yet");
-        }
-    
-        std::ifstream file(currentConfigFile_);
-        if (!file.is_open()) {
-            throw std::runtime_error("Cannot open config file for reload: " + currentConfigFile_);
-        }
-    
-        nlohmann::json newConfig;
-        file >> newConfig;
-    
-        if (!validate(newConfig)) {
-            throw std::runtime_error("Config validation failed on reload");
-        }
-    
-        config_ = std::move(newConfig);
-        valid_ = true;
-    }
+    cache_.updateCache(env, merged);
+    return merged;
+}
 
-    bool ConfigManager::isValid() const {
-        std::lock_guard lock(mutex_);
-        return valid_;
-    }
-
-    nlohmann::json ConfigManager::getEnvironmentConfig(const std::string& env) const {
-        std::lock_guard lock(mutex_);
-        if (!valid_ || !config_.contains("environments") || !config_["environments"].contains(env)) {
-            throw std::runtime_error("Environment config not found: " + env);
-        }
-        return config_["environments"][env];
+void ConfigManager::applyCliOverrides(const std::unordered_map<std::string, std::string>& overrides) {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    
+    auto overrideJson = nlohmann::json::parse("{}");
+    for (const auto& [key, value] : overrides) {
+        overrideJson[key] = value;
     }
     
-    nlohmann::json ConfigManager::getLoggingConfig(const std::string& env) const {
-        auto envConfig = getEnvironmentConfig(env);
-        if (!envConfig.contains("logging")) {
-            throw std::runtime_error("Logging config not found for environment: " + env);
-        }
-        return envConfig["logging"];
-    }
-    
-    bool ConfigManager::validate(const nlohmann::json& config) const {
-        // Простейшая валидация структуры
-        if (!config.is_object()) return false;
-        if (!config.contains("environments") || !config["environments"].is_object()) return false;
-    
-        // TO-DO: Можно добавить более глубокую проверку, например:
-        // - Проверить, что в каждом окружении есть секция logging
-        // - Проверить типы полей, наличие обязательных параметров и т.п.
-    
-        return true;
-    }
+    baseConfig_.merge_patch(overrideJson);
+    cache_.updateCache("development", nlohmann::json());
+    cache_.updateCache("production", nlohmann::json());
+}

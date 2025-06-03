@@ -1,37 +1,56 @@
 #pragma once
-
-#include <string>
-#include <mutex>
+#include "../include/configloader.hpp"
+#include "../include/configvalidator.hpp"
+#include "../include/enviromentprocessor.hpp"
+#include "../include/configcache.hpp"
 #include <nlohmann/json.hpp>
+#include <mutex>
+#include <unordered_map>
 
-    class ConfigManager {
-        public:
-            static ConfigManager& instance();
+/**
+ * @class ConfigManager
+ * @brief Фасад для управления конфигурацией системы
+ * 
+ * @note Объединяет функциональность:
+ * - Загрузка конфигурации из файла
+ * - Обработка переменных окружения
+ * - Валидация структуры
+ * - Кеширование результатов
+ * 
+ * @warning Не потокобезопасен при одновременном вызове методов modify
+ */
+class ConfigManager {
+public:
+    static ConfigManager& instance();
+    
+    /**
+     * @brief Инициализирует конфигурацию из файла
+     * @param filename Путь к JSON-файлу конфигурации
+     * @throw std::runtime_error При ошибках загрузки/валидации
+     */
+    void initialize(const std::string& filename);
 
-            void loadFromFile(const std::string& filename);
+    /**
+     * @brief Возвращает объединенную конфигурацию для окружения
+     * @param env Идентификатор окружения (development/production)
+     * @return nlohmann::json Кешированный результат слияния
+     */
+    nlohmann::json getMergedConfig(const std::string& env) const;
 
-            // Перезагрузка конфигурации (может вызываться в runtime)
-            void reload();
+    /**
+     * @brief Применяет переопределения из CLI
+     * @param overrides Маппинг ключ-значение для замены
+     */
+    void applyCliOverrides(const std::unordered_map<std::string, std::string>& overrides);
 
-            // Проверка валидности конфигурации
-            bool isValid() const;
+private:
+    ConfigManager() = default;
+    ~ConfigManager() = default;
 
-            // Получение конфига окружения (копия для безопасности)
-            nlohmann::json getEnvironmentConfig(const std::string& env) const;
-
-            // Получение конфигурации логгера для окружения (копия)
-            nlohmann::json getLoggingConfig(const std::string& env) const;
-            bool validate(const nlohmann::json& config) const;
-
-        private:
-            ConfigManager() = default;
-            ~ConfigManager() = default;
-
-            ConfigManager(const ConfigManager&) = delete;
-            ConfigManager& operator=(const ConfigManager&) = delete;
-
-            mutable std::mutex mutex_;
-            nlohmann::json config_;
-            bool valid_ = false;
-            std::string currentConfigFile_;
-    };
+    ConfigLoader loader_;
+    ConfigValidator validator_;
+    EnvironmentProcessor envProcessor_;
+    mutable ConfigCache cache_;
+    nlohmann::json baseConfig_;
+    mutable std::mutex configMutex_;
+};
