@@ -1,213 +1,27 @@
-/**
- * @file service_controller.hpp
- * @author Ваше имя
- * @date Март 2025
- * @brief Основной контроллер сервиса фильтрации XML
- *
- * @details Класс ServiceController реализует:
- * - Обработку аргументов командной строки
- * - Управление жизненным циклом сервиса
- * - Взаимодействие с модулями логирования и мастер-процессом
- * - Механизмы перезагрузки конфигурации
- *
- * @section Основные_компоненты
- * - run(): Точка входа в приложение
- * - parseArguments(): Парсинг CLI параметров
- * - sendReloadSignal(): Отправка сигналов работающему процессу
- *
- * @note Для корректной работы требуется:
- * - Предварительная инициализация Logger
- * - Наличие конфигурационного файла по умолчанию (config.json)
- *
- * @warning Не поддерживает параллельный запуск нескольких экземпляров
- *
- * @see Logger
- * @see Master
- * @see SignalHandler
- */
-
 #pragma once
-
+#include <atomic>
+#include <memory>
 #include <string>
-#include <vector>
-#include <optional>
 
-#include "stc/compositelogger.hpp"
-#include "stc/consolelogger.hpp"
-#include "stc/asyncfilelogger.hpp"
+#include "../include/argumentparser.hpp"
+#include "../include/configmanager.hpp"
+#include "../include/daemonmanager.hpp"
 #include "../include/master.hpp"
+#include "../include/signalrouter.hpp"
 
-/**
- * @class ServiceController
- * @brief Центральный управляющий класс сервиса фильтрации XML
- *
- * @ingroup CoreComponents
- *
- * @details Обеспечивает полный цикл работы сервиса, включая:
- * - Парсинг и валидацию аргументов командной строки
- * - Инициализацию и конфигурацию подсистем
- * - Управление главным рабочим циклом
- * - Обработку системных сигналов
- * - Механизмы graceful shutdown и перезагрузки
- *
- * @section Архитектура
- * Класс выступает фасадом для основных компонентов системы:
- * - Logger - система логирования (библиотека liblogger)
- * - Master - управление worker-процессами
- * - SignalHandler - обработка POSIX-сигналов
- *
- * @section Жизненный_цикл
- * 1. Инициализация:
- *    - Парсинг CLI параметров (parseArguments())
- *    - Создание PID-файла (initialize())
- *    - Старт Master-процесса
- * 2. Главный цикл (mainLoop()):
- *    - Обработка сигналов
- *    - Проверка состояния воркеров
- *    - Ожидание событий
- * 3. Завершение:
- *    - Корректная остановка Master
- *    - Удаление PID-файла
- *    - Закрытие логгера
- *
- * @subsection Сигналы
- * Обрабатываемые сигналы:
- * - SIGTERM/SIGINT: Graceful shutdown
- * - SIGHUP: Hot reload конфигурации
- *
- * @note Требования к окружению:
- * - Наличие config.json или указание альтернативного конфига
- * - Права на запись в /var/run/ для PID-файла
- * - Доступ к указанным в конфиге ресурсам
- *
- * @warning Особенности безопасности:
- * - PID-файл создается с правами 0644
- * - Перезагрузка требует валидных credentials в конфиге
- * - Нет встроенной защиты от race condition при параллельном запуске
- *
- * @example Пример запуска:
- * @code{.sh}
- * ./service --config /etc/service_conf.json --log-level debug
- * ./service --reload
- * @endcode
- *
- * @see Документация по архитектуре: docs/architecture.md
- * @see Пример конфигурации: configs/service.example.json
- */
 class ServiceController {
  public:
-  /**
-   * @public
-   * @param [in] argc Количество переданных аргументов
-   * @param [in] argv Массив строк содержащих значения переданных аргументов
-   * @return Возвращаемый код выполнения процесса. 0 - если успешно.
-   * @brief Функция запуска выполнения основного процесса
-   */
   int run(int argc, char** argv);
 
  private:
-  /**
-   * @brief Парсит аргументы командной строки
-   * @param [in] argc Количество аргументов (int)
-   * @param [in] argv Массив аргументов (char*)
-   * @return true - парсинг успешен, false - ошибка/необходимость выхода
-   *
-   * @details Поддерживаемые аргументы:
-   * - --help/-h          Вывод справки
-   * - --reload/-r        Перезагрузка конфигурации
-   * - --log-level LEVEL  Уровень логирования
-   * - --config FILE      Путь к конфигурации
-   * - --log-file FILE    Файл для логирования
-   */
-  bool parseArguments(int argc, char** argv);
-
-  /**
-   * @brief Инициализирует компоненты сервиса
-   *
-   * @details Создает PID-файл, настраивает:
-   * - Обработчики сигналов (SignalHandler)
-   * - Мастер-процесс (Master)
-   * - Логгер (Logger)
-   * @throw std::runtime_error При ошибке запуска Master
-   */
-  void initialize();
-
-  void initLogger();
-
-  void setupSignalHandlers();
-  
-  /**
-   * @brief Главный цикл работы сервиса
-   *
-   * @details Обрабатывает:
-   * - Сигналы остановки (SIGTERM/SIGINT)
-   * - Запросы на перезагрузку конфигурации (SIGHUP)
-   * - Периодические проверки состояния (раз в секунду)
-   */
+  void initialize(const ParsedArgs& args);
+  void initLogger(const ParsedArgs& args);
   void mainLoop();
+  void handleShutdown();
 
-  /**
-   * @brief Отправляет сигнал перезагрузки работающему процессу
-   * @return true - сигнал отправлен, false - ошибка
-   *
-   * @details Читает PID из /var/run/service.pid.
-   *          Логирует ошибки при:
-   * - Отсутствии PID-файла
-   * - Невалидном PID
-   * - Ошибках отправки сигнала
-   */
-  bool sendReloadSignal();
-
-  /**
-   * @brief Выводит справку по аргументам командной строки
-   *
-   * @details Формат вывода:
-   * - Описание сервиса
-   * - Список поддерживаемых аргументов
-   * - Примеры использования
-   */
-  void printHelp() const;
-
-  /**
-   * @brief Путь к конфигурационному файлу сервиса
-   * @details Хранит абсолютный или относительный путь к JSON-конфигурации.
-   *          Значение по умолчанию: "./config.json".
-   *          Может быть изменен через аргумент --config.
-   * @note Файл должен содержать валидные настройки источников и логирования.
-   * @see parseArguments()
-   */
-  std::string config_path_ = "/etc/stc/xmlfilter/config.json";
-
-  /**
-   * @brief Уровень логгирования, задаваемый параметрами командной строки
-   * @details Хранит уровень логгирования, задаваемый параметрами командной 
-   *          строки приложения.
-   * @note Заданный уровень логирования имеет высший приоритет и не может 
-   *       быть переопределен параметрами, заданными в конфигурационном файле 
-   *       приложения
-   */
-  std::optional<std::string> cliLogLevel_;
-
-  /**
-   * @brief Перечисление логеров, используемых приложением.
-   * @details Вектор хранит строковые значения, определяющие типы логгеров,
-   *          Используемых приложением.
-   * @note Заданные способы логирования имеют высший приоритет и не могут быть 
-   *       переопределены в конфигурационном файле приложения. 
-   */
-  std::vector<std::string> loggerTypes_; // Задает типы логгеров, игнорирует параметры логгеров, заданные в конфигурационном файле.
-
-  /**
-   * @brief Ядро управления worker-процессами
-   * @details Отвечает за:
-   * - Запуск/остановку worker-процессов
-   * - Перезагрузку конфигурации
-   * - Мониторинг состояния воркеров
-   * @warning Все взаимодействия с master_ должны синхронизироваться через его
-   * внутренний мьютекс.
-   * @see Master
-   */
-  Master master_;
-
-  bool run_as_daemon_ = false;
+  std::unique_ptr<Master> master_;
+  std::unique_ptr<DaemonManager> daemon_;
+  std::unique_ptr<SignalRouter> signal_router_;
+  std::string config_path_ = "config.json";
+  std::atomic<bool> running_{false};
 };

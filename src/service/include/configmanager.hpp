@@ -1,56 +1,58 @@
 #pragma once
+#include <mutex>
+#include <nlohmann/json.hpp>
+#include <unordered_map>
+
+#include "../include/configcache.hpp"
 #include "../include/configloader.hpp"
 #include "../include/configvalidator.hpp"
 #include "../include/enviromentprocessor.hpp"
-#include "../include/configcache.hpp"
-#include <nlohmann/json.hpp>
-#include <mutex>
-#include <unordered_map>
 
 /**
  * @class ConfigManager
  * @brief Фасад для управления конфигурацией системы
- * 
+ *
  * @note Объединяет функциональность:
  * - Загрузка конфигурации из файла
  * - Обработка переменных окружения
  * - Валидация структуры
  * - Кеширование результатов
- * 
+ *
  * @warning Не потокобезопасен при одновременном вызове методов modify
  */
 class ConfigManager {
-public:
-    static ConfigManager& instance();
-    
-    /**
-     * @brief Инициализирует конфигурацию из файла
-     * @param filename Путь к JSON-файлу конфигурации
-     * @throw std::runtime_error При ошибках загрузки/валидации
-     */
-    void initialize(const std::string& filename);
+ public:
+  static ConfigManager& instance();
 
-    /**
-     * @brief Возвращает объединенную конфигурацию для окружения
-     * @param env Идентификатор окружения (development/production)
-     * @return nlohmann::json Кешированный результат слияния
-     */
-    nlohmann::json getMergedConfig(const std::string& env) const;
+  /**
+   * @brief Инициализирует конфигурацию из файла
+   * @param filename Путь к JSON-файлу конфигурации
+   * @throw std::runtime_error При ошибках загрузки/валидации
+   */
+  void initialize(const std::string& filename);
 
-    /**
-     * @brief Применяет переопределения из CLI
-     * @param overrides Маппинг ключ-значение для замены
-     */
-    void applyCliOverrides(const std::unordered_map<std::string, std::string>& overrides);
+  /**
+   * @brief Возвращает объединенную конфигурацию для окружения
+   * @param env Идентификатор окружения (development/production)
+   * @return nlohmann::json Кешированный результат слияния
+   */
+  nlohmann::json getMergedConfig(const std::string& env) const;
 
-private:
-    ConfigManager() = default;
-    ~ConfigManager() = default;
+  /**
+   * @brief Применяет переопределения из CLI
+   * @param overrides Маппинг ключ-значение для замены
+   */
+  void applyCliOverrides(
+      const std::unordered_map<std::string, std::string>& overrides);
 
-    ConfigLoader loader_;
-    ConfigValidator validator_;
-    EnvironmentProcessor envProcessor_;
-    mutable ConfigCache cache_;
-    nlohmann::json baseConfig_;
-    mutable std::mutex configMutex_;
+ private:
+  ConfigManager() = default;
+  ~ConfigManager() = default;
+
+  ConfigLoader loader_;
+  ConfigValidator validator_;
+  EnvironmentProcessor envProcessor_;
+  mutable ConfigCache cache_;
+  nlohmann::json baseConfig_;
+  mutable std::mutex configMutex_;
 };
