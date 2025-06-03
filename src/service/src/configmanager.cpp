@@ -43,12 +43,20 @@ nlohmann::json ConfigManager::getMergedConfig(const std::string& env) const {
 void ConfigManager::applyCliOverrides(const std::unordered_map<std::string, std::string>& overrides) {
     std::lock_guard<std::mutex> lock(configMutex_);
     
-    auto overrideJson = nlohmann::json::parse("{}");
+    // Применение CLI переопределений
+    nlohmann::json overrideJson;
     for (const auto& [key, value] : overrides) {
         overrideJson[key] = value;
     }
-    
     baseConfig_.merge_patch(overrideJson);
-    cache_.updateCache("development", nlohmann::json());
-    cache_.updateCache("production", nlohmann::json());
+
+    // Полное обновление кеша для всех окружений
+    if (baseConfig_.contains("environments") && baseConfig_["environments"].is_object()) {
+        for (const auto& [env, _] : baseConfig_["environments"].items()) {
+            cache_.updateCache(env, nlohmann::json());
+        }
+    } else {
+        // Обработка конфигов без секции environments
+        cache_.updateCache("default", nlohmann::json());
+    }
 }
