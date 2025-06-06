@@ -1,0 +1,68 @@
+# Doxyfile для проекта DaemonManager
+
+# Основные параметры
+PROJECT_NAME           = DaemonManager
+PROJECT_BRIEF          = "Библиотека для демонизации процессов и управления PID-файлом"
+PROJECT_NUMBER         = 1.0
+OUTPUT_DIRECTORY       = ./docs
+OUTPUT_LANGUAGE        = Russian
+INPUT                  = ./include ./src
+FILE_PATTERNS          = *.hpp *.cpp
+RECURSIVE              = YES
+
+# Генерация HTML
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+
+# Генерация LaTeX (отключено)
+GENERATE_LATEX         = NO
+
+# Генерация диаграмм
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+CLASS_DIAGRAM          = YES
+UML_LOOK               = YES 
+DOT_IMAGE_FORMAT       = svg
+
+# Генерация подробных комментариев
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_LOCAL_METHODS  = YES
+EXTRACT_ANON_NSPACES   = YES
+JAVADOC_AUTOBRIEF      = YES
+
+# Включать комментарии к файлам
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = YES
+STRIP_CODE_COMMENTS    = NO
+
+# Оформление
+GENERATE_TREEVIEW      = YES
+FULL_PATH_NAMES        = NO
+SEPARATE_MEMBER_PAGES  = YES
+
+# Включать предупреждения
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+
+# Ссылки на исходный код
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Сортировка
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+SORT_GROUP_NAMES       = YES
+SORT_BY_SCOPE_NAME     = YES
+
+# Включать только публичные и защищённые члены
+SHOW_INCLUDE_FILES     = YES
+
+# Прочее
+QUIET                  = NO
+WARNINGS               = YES
+WARN_LOGFILE           = docs/doxygen_warnings.log

@@ -1,0 +1,66 @@
+{
+    "$schema": "https://example.com/config.schema.json",
+    "environments": {
+        "development": {
+            "logging": [
+                {
+                    "type": "console",
+                    "level": "debug"
+                },
+                {
+                    "type": "sync_file",
+                    "level": "info",
+                    "file": "dev_app.log"
+                }
+            ]
+        },
+        "production": {
+            "logging": [
+                {
+                    "type": "async_file",
+                    "level": "info",
+                    "file": "/var/log/myapp/prod_app.log"
+                },
+                {
+                    "type": "console",
+                    "level": "warning"
+                }
+            ]
+        }
+    },
+    "sources": [
+        {
+            "name": "local_xml",
+            "type": "local",
+            "path": "/data/incoming",
+            "file_mask": "*.xml",
+            "enabled": true,
+            "filtering_enabled": true,
+            "processed_dir": "/data/processed",
+            "filtered_template": "{filename}_filtered.{ext}",
+            "excluded_template": "{filename}_excluded.{ext}"
+        },
+        {
+            "name": "ftp_backup",
+            "type": "ftp",
+            "path": "ftp://backup.example.com/incoming",
+            "file_mask": "data_*.xml",
+            "enabled": true,
+            "filtering_enabled": false,
+            "username": "@env('FTP_USERNAME')",
+            "password": "@env('FTP_PASSWORD')",
+            "port": 21,
+            "processed_dir": "/backup/processed",
+            "filtered_template": "processed/{filename}_filtered.{ext}",
+            "excluded_template": "excluded/{filename}_excluded.{ext}"
+        }
+    ],
+    "global_excluded_file": "/var/log/xml_filter/excluded_{timestamp}.xml",
+    "comparison_list": "./comparison_list.csv",
+    "logging": {
+        "file": "stc_filter_service.log",
+        "color": true,
+        "level": "debug",
+        "syslog": true
+    }
+}
