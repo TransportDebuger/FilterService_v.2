@@ -4,9 +4,9 @@
 
 ### Базовые команды
 
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+mkdir build && cd build \
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+make -j$(nproc) \
 sudo make install
 
 ### Ключевые параметры:
@@ -18,7 +18,7 @@ sudo make install
 
 ### Пример для продакшена:
 
-cmake ..
+cmake .. 
 -DCMAKE_BUILD_TYPE=Release
 -DBUILD_SHARED_LIBS=ON
 -DCMAKE_INSTALL_PREFIX=/usr/local
@@ -27,8 +27,8 @@ cmake ..
 
 ### Полный цикл CI/CD
 
-mkdir build && cd build
-cmake .. -DENABLE_CODE_STYLE_CHECK=ON -DENABLE_VALGRIND_TESTS=ON
+mkdir build && cd build \
+cmake .. -DENABLE_CODE_STYLE_CHECK=ON -DENABLE_VALGRIND_TESTS=ON \
 make check
 
 ### Основные флаги тестирования:
@@ -67,21 +67,21 @@ make doc
 
 ### Установка зависимостей (Ubuntu):
 
-sudo apt-get install -y
-clang-format
-cppcheck
-valgrind
-doxygen
+sudo apt-get install -y \
+clang-format \
+cppcheck \
+valgrind \
+doxygen \
 graphviz
 
 ### Пример полной сборки с тестами:
 
-mkdir build && cd build
-cmake ..
+mkdir build && cd build \
+cmake .. 
 -DENABLE_CODE_STYLE_CHECK=ON
 -DENABLE_VALGRIND_TESTS=ON
--DENABLE_INTEGRATION_TESTS=ON
-make -j$(nproc)
+-DENABLE_INTEGRATION_TESTS=ON \
+make -j$(nproc) \
 ctest --output-on-failure
 
 ## Особенности работы с разными конфигурациями
@@ -100,25 +100,3 @@ cmake ..
 -DCMAKE_INSTALL_PREFIX=/custom/path
 -DLIBRARY_OUTPUT_PATH=/custom/lib
 -DEXECUTABLE_OUTPUT_PATH=/custom/bin
-
-## Устранение неполадок
-
-### Типичные проблемы:
-1. **Ошибки зависимостей:**
-   - Автоматическая установка через CMake (только для Linux)
-   - Ручная установка пакетов из раздела "Установка зависимостей"
-
-2. **Ошибки стиля кода:**
-
-clang-format -style=Google -i path/to/file.cpp
-
-3. **Проблемы с PID-файлами:**
-
-sudo rm /var/run/myservice.pid
-
-4. **Ошибки Valgrind:**
-
-valgrind --tool=memcheck --leak-check=full --track-origins=yes ./DaemonManagerTest
-
-
-Для дополнительной информации см. `CMakeLists.txt` и документацию к используемым библиотекам.
