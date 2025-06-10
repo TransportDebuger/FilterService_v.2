@@ -69,6 +69,9 @@ public:
      */
     ~DaemonManager();
 
+    DaemonManager(const DaemonManager& other) = delete;
+    DaemonManager& operator=(const DaemonManager& other) = delete;
+    
     /**
      * @brief Демонизирует текущий процесс
      * @throw std::system_error При ошибках:
