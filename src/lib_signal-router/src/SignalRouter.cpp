@@ -2,6 +2,8 @@
 #include <sys/epoll.h>
 #include <iostream>
 
+namespace stc {
+
 SignalRouter::SignalRouter() {
     sigset_t mask;
     sigemptyset(&mask);
@@ -104,3 +106,5 @@ SignalRouter::~SignalRouter() {
     close(signal_fd_);
     sigprocmask(SIG_SETMASK, &original_mask_, nullptr);
 }
+
+} //namespace stc

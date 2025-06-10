@@ -4,7 +4,7 @@
 #include "stc/SignalRouter.hpp"
 
 TEST(IntegrationTest, RealSignalHandling) {
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     bool handlerCalled = false;
     
     router.registerHandler(SIGUSR1, [&](int){
@@ -27,7 +27,7 @@ TEST(IntegrationTest, RealSignalHandling) {
 }
 
 TEST(IntegrationTest, GracefulShutdown) {
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     router.start();
     
     std::thread([](){
@@ -40,7 +40,7 @@ TEST(IntegrationTest, GracefulShutdown) {
 }
 
 TEST(IntegrationTest, ConcurrentAccess) {
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     
     auto worker = [&](int sig){
         router.registerHandler(sig, [](int){});

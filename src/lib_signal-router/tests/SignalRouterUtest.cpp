@@ -27,15 +27,15 @@ public:
     MOCK_METHOD(ssize_t, read, (int, void*, size_t), (override));
 };
 
-class SignalRouterTest : public Test {
+class stc::SignalRouterTest : public Test {
 protected:
     void SetUp() override {
         mock_ = new MockSysCallsImpl();
-        SignalRouter::setSysCallWrapper(mock_);
+        stc::SignalRouter::setSysCallWrapper(mock_);
     }
 
     void TearDown() override {
-        SignalRouter::resetSysCallWrapper();
+        stc::SignalRouter::resetSysCallWrapper();
         delete mock_;
     }
 
@@ -46,12 +46,12 @@ TEST_F(SignalRouterTest, RegisterValidSignal) {
     EXPECT_CALL(*mock_, sigprocmask(_, _, _)).WillOnce(Return(0));
     EXPECT_CALL(*mock_, signalfd(_, _, _)).WillOnce(Return(1));
     
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     EXPECT_NO_THROW(router.registerHandler(SIGUSR1, [](int){}));
 }
 
 TEST_F(SignalRouterTest, RegisterInvalidSignal) {
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     EXPECT_THROW(router.registerHandler(SIGKILL, [](int){}), std::invalid_argument);
 }
 
@@ -65,7 +65,7 @@ TEST_F(SignalRouterTest, HandlerInvocation) {
     
     EXPECT_CALL(mockHandler, Call(SIGUSR1)).Times(1);
     
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     router.registerHandler(SIGUSR1, mockHandler.AsStdFunction());
     router.start();
     
@@ -84,7 +84,7 @@ TEST_F(SignalRouterTest, MultipleHandlers) {
     EXPECT_CALL(handler1, Call(SIGUSR2)).Times(1);
     EXPECT_CALL(handler2, Call(SIGUSR2)).Times(1);
     
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     router.registerHandler(SIGUSR2, handler1.AsStdFunction());
     router.registerHandler(SIGUSR2, handler2.AsStdFunction());
     router.start();
@@ -96,12 +96,12 @@ TEST_F(SignalRouterTest, MultipleHandlers) {
 TEST_F(SignalRouterTest, SignalFDError) {
     EXPECT_CALL(*mock_, signalfd(_, _, _)).WillOnce(Return(-1));
     
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     EXPECT_THROW(router.registerHandler(SIGUSR1, [](int){}), std::system_error);
 }
 
 TEST_F(SignalRouterTest, DoubleStart) {
-    SignalRouter& router = SignalRouter::instance();
+    stc::SignalRouter& router = stc::SignalRouter::instance();
     router.start();
     EXPECT_NO_THROW(router.start()); // Должно игнорироваться
     router.stop();

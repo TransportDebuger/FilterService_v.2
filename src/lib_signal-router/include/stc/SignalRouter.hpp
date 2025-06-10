@@ -23,6 +23,8 @@
 #include <sys/signalfd.h>
 #include <unistd.h>
 
+namespace stc {
+
 /**
  * @class SignalRouter
  * @brief Потокобезопасный менеджер обработки сигналов
@@ -113,6 +115,8 @@ private:
     int signal_fd_ = -1; ///< Дескриптор signalfd
     sigset_t original_mask_; ///< Исходная маска сигналов
 };
+
+} // namespace stc
 
 /**
  * @example Пример использования
