@@ -3,11 +3,12 @@
 #include <memory>
 #include <string>
 
+#include "stc/DaemonManager.hpp"
+#include "stc/SignalRouter.hpp"
+
 #include "../include/argumentparser.hpp"
 #include "../include/configmanager.hpp"
-#include "../include/daemonmanager.hpp"
 #include "../include/master.hpp"
-#include "../include/signalrouter.hpp"
 
 class ServiceController {
  public:
