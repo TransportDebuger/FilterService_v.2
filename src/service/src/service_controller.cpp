@@ -2,6 +2,9 @@
 
 #include <filesystem>
 #include <stc/CompositeLogger.hpp>
+#include <stc/consolelogger.hpp>
+#include <stc/asyncfilelogger.hpp>
+#include <stc/syncfilelogger.hpp>
 
 using namespace std::chrono_literals;
 
@@ -14,7 +17,7 @@ int ServiceController::run(int argc, char** argv) {
 
     // Демонизация
     if (args.daemon_mode) {
-      daemon_ = std::make_unique<DaemonManager>("/var/run/service.pid");
+      daemon_ = std::make_unique<stc::DaemonManager>("/var/run/service.pid");
       daemon_->daemonize();
       daemon_->writePid();
     }
@@ -42,7 +45,7 @@ int ServiceController::run(int argc, char** argv) {
 }
 
 void ServiceController::initialize(const ParsedArgs& args) {
-  signal_router_ = std::make_unique<SignalRouter>();
+  signal_router_ = std::make_unique<stc::SignalRouter>();
 
   // Регистрация обработчиков сигналов
   signal_router_->registerHandler(SIGTERM, [this] { handleShutdown(); });
@@ -64,19 +67,20 @@ void ServiceController::initialize(const ParsedArgs& args) {
 
 void ServiceController::initLogger(const ParsedArgs& args) {
   auto& logger = stc::CompositeLogger::instance();
-  logger.clearLoggers();
 
   // Конфигурация из аргументов CLI
   for (const auto& type : args.logger_types) {
     if (type == "console") {
       logger.addLogger<stc::ConsoleLogger>();
-    } else if (type == "file") {
-      logger.addLogger<stc::FileLogger>("service.log");
+    } else if (type == "async_file") {
+      logger.addLogger<stc::AsyncFileLogger>("service.log");
+    } else if (type =="sync_file") {
+      logger.addLogger<stc::SyncFileLogger>("service.log");
     }
   }
 
   // Уровень логирования
-  logger.setLevel(args.log_level);
+  logger.setLogLevel(args.log_level);
 }
 
 void ServiceController::mainLoop() {

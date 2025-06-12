@@ -2,6 +2,7 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
+#include <string>
 
 #include "../include/configcache.hpp"
 #include "../include/configloader.hpp"
@@ -32,6 +33,11 @@ class ConfigManager {
   void initialize(const std::string& filename);
 
   /**
+   * @brief Считывает конфигурационный файл повторно.
+   */
+  void reload();
+
+  /**
    * @brief Возвращает объединенную конфигурацию для окружения
    * @param env Идентификатор окружения (development/production)
    * @return nlohmann::json Кешированный результат слияния
@@ -48,11 +54,17 @@ class ConfigManager {
  private:
   ConfigManager() = default;
   ~ConfigManager() = default;
+  
+  void backupCurrentConfig();
+  void restoreBackupConfig();
+  bool validateConfigSafely(const nlohmann::json& config) const;
 
   ConfigLoader loader_;
   ConfigValidator validator_;
   EnvironmentProcessor envProcessor_;
   mutable ConfigCache cache_;
   nlohmann::json baseConfig_;
+  nlohmann::json backupConfig_;
+  std::string configFilePath_;
   mutable std::mutex configMutex_;
 };

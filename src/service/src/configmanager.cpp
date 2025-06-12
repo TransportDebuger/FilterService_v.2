@@ -1,6 +1,7 @@
 #include "../include/configmanager.hpp"
 
 #include <stdexcept>
+#include <iostream>
 
 ConfigManager& ConfigManager::instance() {
   static ConfigManager instance;
@@ -10,6 +11,7 @@ ConfigManager& ConfigManager::instance() {
 void ConfigManager::initialize(const std::string& filename) {
   std::lock_guard<std::mutex> lock(configMutex_);
 
+  configFilePath_ = filename;
   try {
     baseConfig_ = loader_.loadFromFile(filename);
     envProcessor_.process(baseConfig_);
@@ -22,6 +24,45 @@ void ConfigManager::initialize(const std::string& filename) {
     throw std::runtime_error(std::string("Config initialization failed: ") +
                              e.what());
   }
+}
+
+void ConfigManager::reload() {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    
+    if (configFilePath_.empty()) {
+        throw std::runtime_error("No configuration file path available for reload");
+    }
+    
+    try {
+        // Создаем резервную копию текущей конфигурации
+        backupCurrentConfig();
+        
+        // Пытаемся загрузить новую конфигурацию
+        nlohmann::json newConfig = loader_.loadFromFile(configFilePath_);
+        
+        // Обработка переменных окружения
+        envProcessor_.process(newConfig);
+        
+        // Валидация новой конфигурации
+        if (!validateConfigSafely(newConfig)) {
+            throw std::runtime_error("New configuration failed validation");
+        }
+        
+        // Если валидация прошла успешно - применяем новую конфигурацию
+        baseConfig_ = std::move(newConfig);
+        
+        // Очищаем кеш для перестроения с новой конфигурацией
+        cache_.clearAll();
+        
+        std::cout << "Configuration reloaded successfully from: " << configFilePath_ << std::endl;
+        
+    } catch (const std::exception& e) {
+        // В случае ошибки восстанавливаем предыдущую конфигурацию
+        restoreBackupConfig();
+        std::cerr << "Failed to reload configuration: " << e.what() << std::endl;
+        std::cerr << "Using previous configuration" << std::endl;
+        throw std::runtime_error("Config reload failed: " + std::string(e.what()));
+    }
 }
 
 nlohmann::json ConfigManager::getMergedConfig(const std::string& env) const {
@@ -64,4 +105,26 @@ void ConfigManager::applyCliOverrides(
     // Обработка конфигов без секции environments
     cache_.updateCache("default", nlohmann::json());
   }
+}
+
+void ConfigManager::backupCurrentConfig() {
+    if (!baseConfig_.empty()) {
+        backupConfig_ = baseConfig_;
+    }
+}
+
+void ConfigManager::restoreBackupConfig() {
+    if (!backupConfig_.empty()) {
+        baseConfig_ = backupConfig_;
+        std::cout << "Configuration restored from backup" << std::endl;
+    }
+}
+
+bool ConfigManager::validateConfigSafely(const nlohmann::json& config) const {
+    try {
+        return validator_.validateRoot(config);
+    } catch (const std::exception& e) {
+        std::cerr << "Validation error: " << e.what() << std::endl;
+        return false;
+    }
 }

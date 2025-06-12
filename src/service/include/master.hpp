@@ -2,10 +2,10 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include "stc/MetricsCollector.hpp"
+#include "stc/SignalRouter.hpp"
 #include "../include/workercontainer.hpp"
-#include "../include/metricscollector.hpp"
 #include "../include/adapterfabric.hpp"
-#include "../include/signalrouter.hpp"
 
 class Master {
 public:
@@ -20,20 +20,20 @@ public:
     bool start();
     void stop() noexcept;
     void reload();
+    void healthCheck();
     State getState() const noexcept;
     size_t getWorkerCount() const;
 
 private:
     void spawnWorkers();
     void terminateWorkers();
-    void healthCheck();
     void validateConfig(const nlohmann::json& config) const;
 
     WorkersContainer workers_;
     std::function<nlohmann::json()> getConfig_;
     std::unique_ptr<AdapterFactory> factory_;
-    std::shared_ptr<SignalRouter> signalRouter_;
+    std::shared_ptr<stc::SignalRouter> signalRouter_;
     std::atomic<State> state_{State::STOPPED};
-    MetricsCollector metrics_;
+    stc::MetricsCollector metrics_;
     mutable std::mutex configMutex_;
 };

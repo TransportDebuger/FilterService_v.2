@@ -1,6 +1,6 @@
-#include <libsmbclient.h>
+//#include <libsmbclient.h>
 
-#include "../includes/filestorageinterface.hpp"
+#include "../include/filestorageinterface.hpp"
 
 class SmbFileAdapter : public FileStorageInterface {
   std::string smbUrl;  // smb://user:pass@server/share

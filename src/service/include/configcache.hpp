@@ -19,7 +19,12 @@ class ConfigCache {
    */
   void updateCache(const std::string& env, const nlohmann::json& config);
 
+  /**
+   * @brief Очищает весь кеш конфигураций
+   */
+  void clearAll();
+
  private:
-  mutable std::mutex cacheMutex;  ///< Мьютекс для синхронизации доступа
-  nlohmann::json cachedConfig;  ///< Кешированные данные конфигурации
+  mutable std::mutex cacheMutex_;  ///< Мьютекс для синхронизации доступа
+  nlohmann::json cachedConfig_;  ///< Кешированные данные конфигурации
 };

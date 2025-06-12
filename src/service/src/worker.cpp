@@ -15,7 +15,7 @@ Worker::Worker(const SourceConfig& config) : config_(config), pid_(::getpid()) {
   //   std::make_unique<XmlProcessor>(config_.comparison_list);
 
   stc::CompositeLogger::instance().info(
-      "Worker created for source: " + config_.name,
+      "Worker created for source: " + config_.name +
       "Worker" + std::to_string(pid_));
 }
 
@@ -138,7 +138,7 @@ void Worker::run() {
 
         } catch (const std::exception& e) {
           stc::CompositeLogger::instance().error(
-              "Failed to process file " + file_path + ": " + e.what(),
+              "Failed to process file " + file_path + ": " + e.what() + 
               worker_tag);
         }
       }
@@ -148,7 +148,7 @@ void Worker::run() {
     }
   } catch (const std::exception& e) {
     stc::CompositeLogger::instance().error(
-        "Worker crashed: " + std::string(e.what()), worker_tag);
+        "Worker crashed: " + std::string(e.what()) + worker_tag);
     running_ = false;
   }
 }
