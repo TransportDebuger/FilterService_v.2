@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <unordered_map>
 
 bool stc::TimeFormatter::setGlobalFormat(const std::string& fmt) {
   try {
@@ -83,3 +84,19 @@ std::string stc::leveltoString(LogLevel level) {
   }
   return level_;
 }
+
+stc::LogLevel stc::stringToLogLevel(std::string strLevel) { 
+  static const std::unordered_map<std::string, stc::LogLevel> mapping = {
+        {"debug",   stc::LogLevel::LOG_DEBUG},
+        {"info",    stc::LogLevel::LOG_INFO},
+        {"warning", stc::LogLevel::LOG_WARNING},
+        {"error",   stc::LogLevel::LOG_ERROR},
+        {"critical", stc::LogLevel::LOG_CRITICAL}
+    };
+
+    auto it = mapping.find(strLevel);
+    if (it != mapping.end()) {
+        return it->second;
+    }
+    throw std::invalid_argument("Invalid log level: " + strLevel);
+  }

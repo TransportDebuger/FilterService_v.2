@@ -55,5 +55,6 @@ class ILogger {
 };
 
 std::string leveltoString(LogLevel level);
+LogLevel stringToLogLevel(std::string strLevel);
 
 }  // namespace stc

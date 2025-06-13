@@ -22,7 +22,6 @@ class ServiceController {
 
   std::unique_ptr<Master> master_;
   std::unique_ptr<stc::DaemonManager> daemon_;
-  std::unique_ptr<stc::SignalRouter> signal_router_;
   std::string config_path_ = "config.json";
   std::atomic<bool> running_{false};
 };

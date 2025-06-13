@@ -45,11 +45,10 @@ int ServiceController::run(int argc, char** argv) {
 }
 
 void ServiceController::initialize(const ParsedArgs& args) {
-  signal_router_ = std::make_unique<stc::SignalRouter>();
 
-  // Регистрация обработчиков сигналов
-  signal_router_->registerHandler(SIGTERM, [this] { handleShutdown(); });
-  signal_router_->registerHandler(SIGHUP, [this] {
+  // Регистрация обработчиков сигналов. За одно инициализируем синглтон SignalRouter.
+  stc::SignalRouter::instance().registerHandler(SIGTERM, [this](int) { handleShutdown(); });
+  stc::SignalRouter::instance().registerHandler(SIGHUP, [this](int) {
     try {
       ConfigManager::instance().reload();
       master_->reloadWorkers();
@@ -66,21 +65,31 @@ void ServiceController::initialize(const ParsedArgs& args) {
 }
 
 void ServiceController::initLogger(const ParsedArgs& args) {
-  auto& logger = stc::CompositeLogger::instance();
+    auto& logger = stc::CompositeLogger::instance();
+    
+    // Лямбда для безопасного создания shared_ptr из синглтона
+    auto getSingletonPtr = [](auto& singleton) {
+        return std::shared_ptr<std::remove_reference_t<decltype(singleton)>>(
+            &singleton, 
+            [](auto*){} // Пустой делитер, так как синглтон управляет своим временем жизни
+        );
+    };
 
-  // Конфигурация из аргументов CLI
-  for (const auto& type : args.logger_types) {
-    if (type == "console") {
-      logger.addLogger<stc::ConsoleLogger>();
-    } else if (type == "async_file") {
-      logger.addLogger<stc::AsyncFileLogger>("service.log");
-    } else if (type =="sync_file") {
-      logger.addLogger<stc::SyncFileLogger>("service.log");
+    for (const auto& type : args.logger_types) {
+        if (type == "console") {
+            logger.addLogger(getSingletonPtr(stc::ConsoleLogger::instance()));
+        } else if (type == "async_file") {
+            auto& fileLogger = stc::AsyncFileLogger::instance();
+            fileLogger.setMainLogPath("service.log");
+            logger.addLogger(getSingletonPtr(fileLogger));
+        } else if (type == "sync_file") {
+            auto& fileLogger = stc::SyncFileLogger::instance();
+            fileLogger.setMainLogPath("service.log");
+            logger.addLogger(getSingletonPtr(fileLogger));
+        }
     }
-  }
-
-  // Уровень логирования
-  logger.setLogLevel(args.log_level);
+    
+    logger.setLogLevel(stc::stringToLogLevel(args.log_level));
 }
 
 void ServiceController::mainLoop() {
