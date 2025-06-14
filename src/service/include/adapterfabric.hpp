@@ -20,8 +20,8 @@ class AdapterFactory {
    * @return std::unique_ptr<FileStorageInterface> Умный указатель на созданный
    * адаптер
    */
-  virtual std::unique_ptr<FileStorageInterface> createAdapter(
-      const SourceConfig& config) = 0;
+  virtual std::unique_ptr<FileStorageInterface> createAdapter();
+      //const SourceConfig& config) = 0;
 
  protected:
   /**

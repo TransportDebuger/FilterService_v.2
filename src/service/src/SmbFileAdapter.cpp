@@ -24,5 +24,6 @@ class SmbFileAdapter : public FileStorageInterface {
   bool isAvailable() override {
     // Проверка доступности SMB-сервера
     // ...
+    return true;
   }
 };

@@ -34,6 +34,5 @@ private:
     std::unique_ptr<AdapterFactory> factory_;
     std::shared_ptr<stc::SignalRouter> signalRouter_;
     std::atomic<State> state_{State::STOPPED};
-    stc::MetricsCollector metrics_;
     mutable std::mutex configMutex_;
 };

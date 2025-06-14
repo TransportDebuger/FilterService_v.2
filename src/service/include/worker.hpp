@@ -18,7 +18,9 @@ class Worker {
   void stop();
   void pause();
   void resume();
-
+  bool isAlive() const;
+  void restart();
+  void stopGracefully();
   const SourceConfig& getConfig() const { return config_; }
   bool isRunning() const { return running_; }
 

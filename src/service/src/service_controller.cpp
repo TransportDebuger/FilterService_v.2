@@ -17,7 +17,7 @@ int ServiceController::run(int argc, char** argv) {
 
     // Демонизация
     if (args.daemon_mode) {
-      daemon_ = std::make_unique<stc::DaemonManager>("/var/run/service.pid");
+      daemon_ = std::make_unique<stc::DaemonManager>("/var/run/xmlfilter.pid");
       daemon_->daemonize();
       daemon_->writePid();
     }
@@ -33,7 +33,7 @@ int ServiceController::run(int argc, char** argv) {
     initialize(args);
 
     // Главный цикл
-    signal_router_->start();
+    stc::SignalRouter::instance().start();
     mainLoop();
 
     return EXIT_SUCCESS;
@@ -51,7 +51,7 @@ void ServiceController::initialize(const ParsedArgs& args) {
   stc::SignalRouter::instance().registerHandler(SIGHUP, [this](int) {
     try {
       ConfigManager::instance().reload();
-      master_->reloadWorkers();
+      master_->reload();
     } catch (const std::exception& e) {
       stc::CompositeLogger::instance().error("Reload failed: " +
                                              std::string(e.what()));

@@ -5,6 +5,7 @@
 #include <system_error>
 
 #include "stc/compositelogger.hpp"
+#include "worker.hpp"
 
 namespace fs = std::filesystem;
 
@@ -79,6 +80,22 @@ void Worker::resume() {
       "Worker resumed"
       "Worker" +
       std::to_string(pid_));
+}
+
+bool Worker::isAlive() const {
+    return running_.load(std::memory_order_relaxed);
+}
+
+void Worker::restart() {
+    stopGracefully();
+    start();
+}
+
+void Worker::stopGracefully() {
+    running_.store(false, std::memory_order_relaxed);
+    if (worker_thread_.joinable()) {
+        worker_thread_.join();
+    }
 }
 
 void Worker::run() {

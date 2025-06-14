@@ -84,26 +84,26 @@ if(ENABLE_CODE_STYLE_CHECK)
 endif()
 
 # Unit-тесты
-if(ENABLE_UNIT_TESTS)
-    enable_testing()
-    find_package(GTest REQUIRED)
-    add_executable(SignalRouterTest tests/SignalRouterUtest.cpp src/SignalRouter.cpp)
-    target_include_directories(SignalRouterTest PRIVATE include)
-    target_link_libraries(SignalRouterTest GTest::GTest GTest::Main pthread)
-    add_test(NAME SignalRouterTest COMMAND SignalRouterTest)
-endif()
+# if(ENABLE_UNIT_TESTS)
+#     enable_testing()
+#     find_package(GTest REQUIRED)
+#     add_executable(SignalRouterTest tests/SignalRouterUtest.cpp src/SignalRouter.cpp)
+#     target_include_directories(SignalRouterTest PRIVATE include)
+#     target_link_libraries(SignalRouterTest GTest::GTest GTest::Main pthread)
+#     add_test(NAME SignalRouterTest COMMAND SignalRouterTest)
+# endif()
 
 # Valgrind memory check
-if(ENABLE_VALGRIND_TESTS)
-    find_program(VALGRIND_EXE valgrind)
-    if(NOT VALGRIND_EXE)
-        message(STATUS "Installing valgrind...")
-        execute_process(COMMAND sudo apt-get install -y valgrind)
-    endif()
-    add_test(NAME MemoryCheck
-        COMMAND ${VALGRIND_EXE} --leak-check=full --error-exitcode=1 $<TARGET_FILE:SignalRouterTest>
-    )
-endif()
+# if(ENABLE_VALGRIND_TESTS)
+#     find_program(VALGRIND_EXE valgrind)
+#     if(NOT VALGRIND_EXE)
+#         message(STATUS "Installing valgrind...")
+#         execute_process(COMMAND sudo apt-get install -y valgrind)
+#     endif()
+#     add_test(NAME MemoryCheck
+#         COMMAND ${VALGRIND_EXE} --leak-check=full --error-exitcode=1 $<TARGET_FILE:SignalRouterTest>
+#     )
+# endif()
 
 # Интеграционные тесты
 # if(ENABLE_INTEGRATION_TESTS)

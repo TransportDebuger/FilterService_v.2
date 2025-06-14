@@ -7,9 +7,9 @@ Master::Master(
 ) : getConfig_(std::move(configProvider)),
     factory_(std::move(factory))
 {
-    metrics_.registerCounter("workers_created");
-    metrics_.registerCounter("workers_terminated");
-    metrics_.registerCounter("reload_attempts");
+    stc::MetricsCollector::instance().registerCounter("workers_created");
+    stc::MetricsCollector::instance().registerCounter("workers_terminated");
+    stc::MetricsCollector::instance().registerCounter("reload_attempts");
 }
 
 Master::~Master() {
@@ -28,8 +28,8 @@ bool Master::start() {
         validateConfig(config);
         spawnWorkers();
         
-        signalRouter_->registerHandler(SIGHUP, [this]{
-            metrics_.incrementCounter("reload_attempts");
+        stc::SignalRouter::instance().registerHandler(SIGHUP, [this](int){
+            stc::MetricsCollector::instance().incrementCounter("reload_attempts");
             reload();
         });
         
@@ -48,7 +48,7 @@ void Master::stop() noexcept {
     State current = state_.exchange(State::STOPPED);
     if (current != State::STOPPED) {
         terminateWorkers();
-        metrics_.incrementCounter("workers_terminated", workers_.size());
+        stc::MetricsCollector::instance().incrementCounter("workers_terminated", workers_.size());
         stc::CompositeLogger::instance().info("Master stopped");
     }
 }
@@ -71,11 +71,13 @@ void Master::reload() {
                 if (!cfg.enabled) continue;
                 
                 try {
-                    newWorkers.addWorker(std::make_unique<Worker>(
-                        cfg, 
-                        factory_->createAdapter(cfg.type, cfg.path)
-                    ));
-                    metrics_.incrementCounter("workers_created");
+                   workers.emplace_back(
+                        std::make_unique<Worker>(
+                            cfg,
+                            factory_->createAdapter(cfg.type, cfg.path)
+                        )
+                    );
+                    stc::MetricsCollector::instance().incrementCounter("workers_created");
                 } catch (const std::exception& e) {
                     stc::CompositeLogger::instance().error(
                         "Worker creation failed: " + std::string(e.what()));
@@ -104,7 +106,7 @@ void Master::spawnWorkers() {
                     cfg, 
                     factory_->createAdapter(cfg.type, cfg.path)
                 ));
-                metrics_.incrementCounter("workers_created");
+                stc::MetricsCollector::instance().incrementCounter("workers_created");
             } catch (const std::exception& e) {
                 stc::CompositeLogger::instance().error(
                     "Worker creation failed: " + std::string(e.what()));
@@ -126,7 +128,7 @@ void Master::healthCheck() {
         for (auto& w : workers) {
             if (!w->isAlive()) {
                 w->restart();
-                metrics_.incrementCounter("workers_restarted");
+                stc::MetricsCollector::instance().incrementCounter("workers_restarted");
             }
         }
     });

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -24,19 +25,32 @@ public:
      * });
      */
     template<typename Func>
-    void access(Func&& func);
+    void access(Func&& func) {
+        std::lock_guard lock(mutex_);
+        func(workers_);
+    };
 
     /**
      * @brief Возвращает текущее количество Worker'ов
      * @return size_t Размер контейнера
      */
-    size_t size() const;
+    size_t size() const {
+        std::lock_guard lock(mutex_);
+        return workers_.size();
+    };
 
     /**
      * @brief Атомарно заменяет содержимое контейнера
      * @param other Контейнер для обмена
      */
-    void swap(WorkersContainer& other);
+    void swap(WorkersContainer& other) {
+    using std::swap;
+        std::unique_lock lock1(mutex_, std::defer_lock);
+        std::unique_lock lock2(other.mutex_, std::defer_lock);
+        std::lock(lock1, lock2);
+    
+        swap(workers_, other.workers_);
+    };
 
 private:
     mutable std::mutex mutex_;
