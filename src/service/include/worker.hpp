@@ -1,43 +1,133 @@
+/**
+ * @file Worker.hpp
+ * @brief Класс для обработки файлов из различных типов хранилищ
+ * 
+ * @details Реализует автономную единицу обработки одного источника данных
+ *          с поддержкой локальных, SMB и FTP хранилищ через адаптеры
+ */
+
 #pragma once
-// #include "../includes/file_monitor.hpp"
 #include <atomic>
-#include <condition_variable>
-#include <filesystem>
-#include <mutex>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <memory>
+#include <string>
+#include <filesystem>
+#include <chrono>
 
 #include "../include/sourceconfig.hpp"
+#include "../include/filestorageinterface.hpp"
+#include "../include/AdapterFactory.hpp"
 #include "stc/compositelogger.hpp"
+#include "stc/MetricsCollector.hpp"
 
+namespace fs = std::filesystem;
+
+/**
+ * @class Worker
+ * @brief Автономная единица обработки файлов из источника данных
+ * 
+ * @note Использует адаптеры для работы с различными типами хранилищ
+ *       и обеспечивает потокобезопасное управление жизненным циклом [25][28]
+ */
 class Worker {
- public:
-  explicit Worker(const SourceConfig& config);
-  ~Worker();
+public:
+    /**
+     * @brief Конструктор с конфигурацией источника
+     * @param config Конфигурация источника данных
+     * @throw std::runtime_error При ошибках создания адаптера
+     */
+    explicit Worker(const SourceConfig& config);
+    
+    /**
+     * @brief Деструктор
+     * @note Автоматически останавливает Worker и освобождает ресурсы
+     */
+    ~Worker();
 
-  void start();
-  void stop();
-  void pause();
-  void resume();
-  bool isAlive() const;
-  void restart();
-  void stopGracefully();
-  const SourceConfig& getConfig() const { return config_; }
-  bool isRunning() const { return running_; }
+    // Основные методы управления жизненным циклом
+    void start();
+    void stop();
+    void pause();
+    void resume();
+    void restart();
+    void stopGracefully();
 
- private:
-  void run();
-  void validatePaths() const;
-  std::string getFileHash(const std::string& file_path) const;
+    // Методы проверки состояния
+    bool isAlive() const noexcept;
+    bool isRunning() const noexcept;
+    bool isPaused() const noexcept;
+    
+    // Доступ к конфигурации
+    const SourceConfig& getConfig() const noexcept { return config_; }
 
-  SourceConfig config_;
-  stc::CompositeLogger& compositeLogger_;
-  // std::unique_ptr<FileMonitor> monitor_;
-  // std::unique_ptr<Processor> processor_;
+private:
+    /**
+     * @brief Основной цикл обработки файлов
+     */
+    void run();
+    
+    /**
+     * @brief Обработка одного файла
+     * @param filePath Путь к файлу для обработки
+     */
+    void processFile(const std::string& filePath);
+    
+    /**
+     * @brief Валидация путей директорий
+     * @throw std::runtime_error При недоступности путей
+     */
+    void validatePaths() const;
+    
+    /**
+     * @brief Вычисление хеша файла
+     * @param filePath Путь к файлу
+     * @return std::string SHA256 хеш файла
+     */
+    std::string getFileHash(const std::string& filePath) const;
+    
+    /**
+     * @brief Получение имени отфильтрованного файла
+     * @param originalPath Исходный путь к файлу
+     * @return std::string Путь к отфильтрованному файлу
+     */
+    std::string getFilteredFilePath(const std::string& originalPath) const;
+    
+    /**
+     * @brief Перемещение файла в директорию обработанных
+     * @param filePath Путь к обработанному файлу
+     * @param processedPath Путь назначения
+     */
+    void moveToProcessed(const std::string& filePath, const std::string& processedPath);
+    
+    /**
+     * @brief Обработка ошибок файла
+     * @param filePath Путь к файлу с ошибкой
+     * @param error Описание ошибки
+     */
+    void handleFileError(const std::string& filePath, const std::string& error);
 
-  std::atomic<bool> running_{false};
-  std::atomic<bool> paused_{false};
-  std::atomic<bool> processing_{false};
-  std::thread worker_thread_;
-  mutable std::mutex state_mutex_;
-  std::condition_variable cv_;
+    // Конфигурация и идентификация
+    SourceConfig config_;                             ///< Конфигурация источника
+    pid_t pid_;                                       ///< PID процесса для идентификации
+    std::string workerTag_;                           ///< Тег воркера для логирования
+    
+    // Адаптер хранилища
+    std::unique_ptr<FileStorageInterface> adapter_;   ///< Адаптер файлового хранилища
+    
+    // Состояние воркера [28]
+    std::atomic<bool> running_{false};               ///< Флаг активности
+    std::atomic<bool> paused_{false};                ///< Флаг паузы
+    std::atomic<bool> processing_{false};            ///< Флаг обработки файла
+    
+    // Многопоточность [24][25]
+    std::thread worker_thread_;                       ///< Рабочий поток
+    mutable std::mutex state_mutex_;                  ///< Мьютекс состояния
+    std::condition_variable cv_;                      ///< Условная переменная для паузы
+    
+    // Метрики
+    std::chrono::steady_clock::time_point start_time_; ///< Время запуска
+    std::atomic<size_t> files_processed_{0};          ///< Количество обработанных файлов
+    std::atomic<size_t> files_failed_{0};             ///< Количество файлов с ошибками
 };

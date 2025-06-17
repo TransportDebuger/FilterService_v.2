@@ -60,7 +60,7 @@
                 {
                     "type": "async_file",
                     "level": "info",
-                    "file": "/var/log/myapp/prod_app.log"
+                    "file": "./prod_app.log"
                 },
                 {
                     "type": "console",
@@ -69,34 +69,20 @@
                 }
             ],
             "sources": [
-                {
-                    "name": "local_xml",
-                    "type": "local",
-                    "path": "/data/incoming",
-                    "file_mask": "*.xml",
-                    "enabled": true,
-                    "filtering_enabled": true,
-                    "processed_dir": "/data/processed",
-                    "bad_dir": "/data/bad",
-                    "excluded_dir": "/data/excluded/",
-                    "filtered_template": "{filename}_filtered.{ext}",
-                    "excluded_template": "{filename}_excluded.{ext}"
-                },
-                {
-                    "name": "ftp_backup",
-                    "type": "ftp",
-                    "path": "ftp://backup.example.com/incoming",
-                    "file_mask": "data_*.xml",
-                    "enabled": true,
-                    "filtering_enabled": false,
-                    "username": "@env('FTP_USERNAME')",
-                    "password": "@env('FTP_PASSWORD')",
-                    "port": 21,
-                    "processed_dir": "/backup/processed",
-                    "filtered_template": "processed/{filename}_filtered.{ext}",
-                    "excluded_template": "excluded/{filename}_excluded.{ext}"
-                }
-            ],
+    {
+      "name": "local_xml_processor",
+      "type": "local",
+      "path": "/mnt/d/test/data/lookup",
+      "file_mask": "*.xml",
+      "processed_dir": "/mnt/d/test/data/processed",
+      "excluded_dir": "/mnt/d/test/data/excluded",
+      "bad_dir": "/mnt/d/test/data/errors",
+      "filtered_template": "{filename}_filtered.{ext}",
+      "filtering_enabled": true,
+      "check_interval": 10,
+      "enabled": true
+    }
+  ],
             "comparison_list": "./comparison_list.csv"
         }
     }

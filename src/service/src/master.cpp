@@ -2,10 +2,8 @@
 #include "stc/CompositeLogger.hpp"
 
 Master::Master(
-    std::unique_ptr<AdapterFactory> factory,
     std::function<nlohmann::json()> configProvider
-) : getConfig_(std::move(configProvider)),
-    factory_(std::move(factory))
+) : getConfig_(std::move(configProvider))
 {
     stc::MetricsCollector::instance().registerCounter("workers_created");
     stc::MetricsCollector::instance().registerCounter("workers_terminated");
@@ -71,10 +69,9 @@ void Master::reload() {
                 if (!cfg.enabled) continue;
                 
                 try {
-                   workers.emplace_back(
+                    workers.emplace_back(
                         std::make_unique<Worker>(
-                            cfg,
-                            factory_->createAdapter(cfg.type, cfg.path)
+                            cfg// Передаем объект SourceConfig целиком
                         )
                     );
                     stc::MetricsCollector::instance().incrementCounter("workers_created");
@@ -96,16 +93,14 @@ void Master::reload() {
 
 void Master::spawnWorkers() {
     auto config = getConfig_();
+
     workers_.access([&](auto& workers){
         for (const auto& src : config["sources"]) {
             SourceConfig cfg = SourceConfig::fromJson(src);
             if (!cfg.enabled) continue;
             
             try {
-                workers.push_back(std::make_unique<Worker>(
-                    cfg, 
-                    factory_->createAdapter(cfg.type, cfg.path)
-                ));
+                workers.push_back(std::make_unique<Worker>(cfg));
                 stc::MetricsCollector::instance().incrementCounter("workers_created");
             } catch (const std::exception& e) {
                 stc::CompositeLogger::instance().error(

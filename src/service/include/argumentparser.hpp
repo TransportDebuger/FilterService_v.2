@@ -10,6 +10,7 @@ struct ParsedArgs {
   std::vector<std::string> logger_types;
   std::string log_level = "info";
   bool daemon_mode = false;
+  std::string environment = "production";
 };
 
 class ArgumentParser {

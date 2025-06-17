@@ -1,171 +1,427 @@
+/**
+ * @file Worker.cpp
+ * @brief Реализация класса Worker для обработки файлов
+ */
+
 #include "../include/worker.hpp"
+#include <sstream>
+#include <iomanip>
+#include <fstream>
+#include <openssl/evp.h>
 
-#include <chrono>
-#include <filesystem>
-#include <system_error>
-
-#include "stc/compositelogger.hpp"
-#include "worker.hpp"
-
-namespace fs = std::filesystem;
-
-Worker::Worker(const SourceConfig& config) : config_(config), pid_(::getpid()) {
-  // Инициализация компонентов
-  //   monitor_ = std::make_unique<FileMonitor>(config_.path,
-  //   config_.file_mask); processor_ =
-  //   std::make_unique<XmlProcessor>(config_.comparison_list);
-
-  stc::CompositeLogger::instance().info(
-      "Worker created for source: " + config_.name +
-      "Worker" + std::to_string(pid_));
+Worker::Worker(const SourceConfig& config) 
+    : config_(config), pid_(::getpid()) {
+    
+    workerTag_ = "Worker" + std::to_string(pid_);
+    
+    try {
+        // Создание адаптера через фабрику [36][38]
+        adapter_ = AdapterFactory::instance().createAdapter(config_);
+        
+        if (!adapter_) {
+            throw std::runtime_error("Failed to create adapter for type: " + config_.type);
+        }
+        
+        // Установка callback для обработки новых файлов [37]
+        adapter_->setCallback([this](const std::string& filePath) {
+            if (running_ && !paused_) {
+                processFile(filePath);
+            }
+        });
+        
+        stc::CompositeLogger::instance().info(
+            "Worker created for source: " + config_.name + 
+            " (type: " + config_.type + "), " + workerTag_
+        );
+        
+        // Регистрация метрик
+        stc::MetricsCollector::instance().registerCounter(
+            "worker_created", "Number of workers created"
+        );
+        stc::MetricsCollector::instance().incrementCounter("worker_created");
+        
+    } catch (const std::exception& e) {
+        stc::CompositeLogger::instance().error(
+            "Failed to create worker: " + std::string(e.what()) + ", " + workerTag_
+        );
+        throw;
+    }
 }
 
 Worker::~Worker() {
-  stop();
-  stc::CompositeLogger::instance().debug(
-      "Worker destroyed"
-      "Worker" +
-      std::to_string(pid_));
+    try {
+        stopGracefully();
+        stc::CompositeLogger::instance().debug(
+            "Worker destroyed, " + workerTag_
+        );
+    } catch (...) {
+        // Подавляем исключения в деструкторе
+    }
 }
 
 void Worker::start() {
-  if (running_) {
-    stc::CompositeLogger::instance().warning(
-        "Worker already running"
-        "Worker" +
-        std::to_string(pid_));
-    return;
-  }
-
-  running_ = true;
-  worker_thread_ = std::thread(&Worker::run, this);
-
-  stc::CompositeLogger::instance().info(
-      "Worker started monitoring: " + config_.path + "Worker" +
-      std::to_string(pid_));
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (running_) {
+        stc::CompositeLogger::instance().warning(
+            "Worker already running, " + workerTag_
+        );
+        return;
+    }
+    
+    try {
+        // Валидация путей
+        validatePaths();
+        
+        // Подключение к хранилищу
+        adapter_->connect();
+        
+        if (!adapter_->isConnected()) {
+            throw std::runtime_error("Failed to connect to storage");
+        }
+        
+        // Запуск мониторинга
+        adapter_->startMonitoring();
+        
+        // Запуск рабочего потока [24][25]
+        running_ = true;
+        paused_ = false;
+        start_time_ = std::chrono::steady_clock::now();
+        worker_thread_ = std::thread(&Worker::run, this);
+        
+        stc::CompositeLogger::instance().info(
+            "Worker started monitoring: " + config_.path + ", " + workerTag_
+        );
+        
+        // Метрики запуска
+        stc::MetricsCollector::instance().registerCounter(
+            "worker_started", "Number of workers started"
+        );
+        stc::MetricsCollector::instance().incrementCounter("worker_started");
+        
+    } catch (const std::exception& e) {
+        running_ = false;
+        stc::CompositeLogger::instance().error(
+            "Failed to start worker: " + std::string(e.what()) + ", " + workerTag_
+        );
+        throw;
+    }
 }
 
 void Worker::stop() {
-  if (!running_) return;
-
-  {
     std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (!running_) return;
+    
     running_ = false;
     paused_ = false;
-  }
-
-  if (worker_thread_.joinable()) {
-    worker_thread_.join();
-  }
-
-  stc::CompositeLogger::instance().info(
-      "Worker stopped"
-      "Worker" +
-      std::to_string(pid_));
+    cv_.notify_all();
+    
+    // Останавливаем мониторинг
+    if (adapter_) {
+        adapter_->stopMonitoring();
+        adapter_->disconnect();
+    }
+    
+    // Ожидаем завершения потока
+    if (worker_thread_.joinable()) {
+        worker_thread_.join();
+    }
+    
+    stc::CompositeLogger::instance().info(
+        "Worker stopped, " + workerTag_
+    );
 }
 
 void Worker::pause() {
-  std::lock_guard<std::mutex> lock(state_mutex_);
-  paused_ = true;
-  stc::CompositeLogger::instance().info(
-      "Worker paused"
-      "Worker" +
-      std::to_string(pid_));
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (!running_ || paused_) return;
+    
+    paused_ = true;
+    stc::CompositeLogger::instance().info(
+        "Worker paused, " + workerTag_
+    );
 }
 
 void Worker::resume() {
-  std::lock_guard<std::mutex> lock(state_mutex_);
-  paused_ = false;
-  stc::CompositeLogger::instance().info(
-      "Worker resumed"
-      "Worker" +
-      std::to_string(pid_));
-}
-
-bool Worker::isAlive() const {
-    return running_.load(std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (!running_ || !paused_) return;
+    
+    paused_ = false;
+    cv_.notify_all();
+    
+    stc::CompositeLogger::instance().info(
+        "Worker resumed, " + workerTag_
+    );
 }
 
 void Worker::restart() {
-    stopGracefully();
+    stc::CompositeLogger::instance().info(
+        "Restarting worker, " + workerTag_
+    );
+    
+    stop();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     start();
 }
 
 void Worker::stopGracefully() {
-    running_.store(false, std::memory_order_relaxed);
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
+    if (!running_) return;
+    
+    // Ожидаем завершения текущей обработки
+    while (processing_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    
+    stop();
+}
+
+bool Worker::isAlive() const noexcept {
+    return running_.load(std::memory_order_relaxed);
+}
+
+bool Worker::isRunning() const noexcept {
+    return running_.load(std::memory_order_relaxed);
+}
+
+bool Worker::isPaused() const noexcept {
+    return paused_.load(std::memory_order_relaxed);
 }
 
 void Worker::run() {
-  const std::string worker_tag = "Worker" + std::to_string(pid_);
-
-  try {
-    while (running_) {
-      // Проверка состояния паузы
-      {
-        std::unique_lock<std::mutex> lock(state_mutex_);
-        if (paused_) {
-          std::this_thread::sleep_for(std::chrono::seconds(1));
-          continue;
+    try {
+        while (running_) {
+            // Проверка состояния паузы [28]
+            std::unique_lock<std::mutex> lock(state_mutex_);
+            if (paused_) {
+                cv_.wait(lock, [this] { return !paused_ || !running_; });
+                continue;
+            }
+            lock.unlock();
+            
+            // Основной цикл уже управляется через callback от адаптера
+            std::this_thread::sleep_for(std::chrono::seconds(config_.check_interval));
+            
+            // Проверка статистики
+            if (std::chrono::steady_clock::now() - start_time_ > std::chrono::minutes(1)) {
+                stc::CompositeLogger::instance().debug(
+                    "Worker stats - Processed: " + std::to_string(files_processed_) +
+                    ", Failed: " + std::to_string(files_failed_) + ", " + workerTag_
+                );
+            }
         }
-      }
-
-      // Проверка новых файлов
-      auto new_files = monitor_->checkNewFiles();
-      if (!new_files.empty()) {
-        stc::CompositeLogger::instance().debug(
-            "Found " + std::to_string(new_files.size()) + " new files " +
-            worker_tag);
-      }
-
-      // Обработка каждого файла
-      for (const auto& file_path : new_files) {
-        if (!running_) break;
-
-        try {
-          // Обработка XML
-          std::string output_path =
-              config_.processed_dir + "/" +
-              config_.getFilteredFileName(
-                  fs::path(file_path).filename().string());
-
-          std::string excluded_path =
-              config_.processed_dir + "/" +
-              config_.getExcludedFileName(
-                  fs::path(file_path).filename().string());
-
-          if (config_.filtering_enabled) {
-            processor_->filter(file_path, output_path, excluded_path);
-            stc::CompositeLogger::instance().info(
-                "Processed file: " + file_path, worker_tag);
-          } else {
-            fs::rename(file_path, output_path);
-            stc::CompositeLogger::instance().info(
-                "Moved file without filtering: " + file_path, worker_tag);
-          }
-
-          // Перемещение обработанного файла
-          if (!config_.processed_dir.empty()) {
-            fs::path processed_file = config_.processed_dir;
-            processed_file /= fs::path(file_path).filename();
-            fs::rename(file_path, processed_file);
-          }
-
-        } catch (const std::exception& e) {
-          stc::CompositeLogger::instance().error(
-              "Failed to process file " + file_path + ": " + e.what() + 
-              worker_tag);
-        }
-      }
-
-      // Пауза между проверками
-      std::this_thread::sleep_for(std::chrono::seconds(config_.check_interval));
+    } catch (const std::exception& e) {
+        stc::CompositeLogger::instance().error(
+            "Worker crashed: " + std::string(e.what()) + ", " + workerTag_
+        );
+        running_ = false;
     }
-  } catch (const std::exception& e) {
-    stc::CompositeLogger::instance().error(
-        "Worker crashed: " + std::string(e.what()) + worker_tag);
-    running_ = false;
-  }
+}
+
+void Worker::processFile(const std::string& filePath) {
+    if (!running_ || paused_) return;
+    
+    processing_ = true;
+    auto start_time = std::chrono::steady_clock::now();
+    
+    try {
+        stc::CompositeLogger::instance().debug(
+            "Processing file: " + filePath + ", " + workerTag_
+        );
+        
+        // Проверка существования файла
+        if (!fs::exists(filePath)) {
+            throw std::runtime_error("File not found: " + filePath);
+        }
+        
+        // Вычисление хеша для проверки целостности
+        std::string fileHash = getFileHash(filePath);
+        
+        fs::path inputFile(filePath);
+        std::string filename = inputFile.filename().string();
+        
+        // Определение путей назначения
+        std::string processedPath = (fs::path(config_.processed_dir) / filename).string();
+        
+        if (config_.filtering_enabled) {
+            // Обработка с фильтрацией
+            std::string filteredPath = getFilteredFilePath(filePath);
+            std::string excludedPath = (fs::path(config_.excluded_dir) / 
+                config_.getExcludedFileName(filename)).string();
+            
+            // Здесь должна быть логика фильтрации через процессор
+            // processor_->filter(filePath, filteredPath, excludedPath);
+            
+            // Пока просто копируем файл
+            fs::copy_file(filePath, filteredPath, fs::copy_options::overwrite_existing);
+            moveToProcessed(filteredPath, processedPath);
+        } else {
+            // Простое перемещение без фильтрации
+            moveToProcessed(filePath, processedPath);
+        }
+        
+        // Записываем метрики времени обработки
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time);
+        
+        stc::MetricsCollector::instance().recordTaskTime(
+            "file_processing_time", duration
+        );
+        
+        files_processed_++;
+        
+        stc::CompositeLogger::instance().info(
+            "Successfully processed file: " + filePath + 
+            " (hash: " + fileHash.substr(0, 8) + "...) in " +
+            std::to_string(duration.count()) + "ms, " + workerTag_
+        );
+        
+    } catch (const std::exception& e) {
+        files_failed_++;
+        handleFileError(filePath, e.what());
+        
+        stc::MetricsCollector::instance().registerCounter(
+            "files_failed", "Number of failed file processing attempts"
+        );
+        stc::MetricsCollector::instance().incrementCounter("files_failed");
+    }
+    
+    processing_ = false;
+}
+
+void Worker::validatePaths() const {
+    std::vector<std::string> paths = {
+        config_.processed_dir,
+        config_.bad_dir,
+        config_.excluded_dir
+    };
+    
+    for (const auto& path : paths) {
+        if (!path.empty() && !fs::exists(path)) {
+            try {
+                fs::create_directories(path);
+                stc::CompositeLogger::instance().info(
+                    "Created directory: " + path + ", " + workerTag_
+                );
+            } catch (const fs::filesystem_error& e) {
+                throw std::runtime_error(
+                    "Cannot create directory " + path + ": " + e.what()
+                );
+            }
+        }
+    }
+}
+
+std::string Worker::getFileHash(const std::string& filePath) const {
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Cannot open file for hashing: " + filePath);
+    }
+
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        throw std::runtime_error("Failed to create EVP context");
+    }
+
+    // Используем EVP для получения размера хеша
+    const EVP_MD* md = EVP_sha256();
+    const size_t hash_size = EVP_MD_size(md);
+
+    if (EVP_DigestInit_ex(mdctx, md, nullptr) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        throw std::runtime_error("Failed to initialize SHA256 digest");
+    }
+
+    char buffer[8192];
+    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
+        if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("Failed to update SHA256 digest");
+        }
+    }
+
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int len = 0;
+    if (EVP_DigestFinal_ex(mdctx, hash, &len) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        throw std::runtime_error("Failed to finalize SHA256 digest");
+    }
+
+    EVP_MD_CTX_free(mdctx);
+
+    // Проверяем размер через EVP
+    if (len != hash_size) {
+        throw std::runtime_error("Invalid SHA256 digest length");
+    }
+
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (unsigned int i = 0; i < len; i++) {
+        ss << std::setw(2) << static_cast<unsigned>(hash[i]);
+    }
+
+    return ss.str();
+}
+
+std::string Worker::getFilteredFilePath(const std::string& originalPath) const {
+    fs::path inputFile(originalPath);
+    std::string filename = inputFile.filename().string();
+    std::string filteredName = config_.getFilteredFileName(filename);
+    return (fs::path(config_.processed_dir) / filteredName).string();
+}
+
+void Worker::moveToProcessed(const std::string& filePath, const std::string& processedPath) {
+    try {
+        // Создаем директорию если не существует
+        fs::path dir = fs::path(processedPath).parent_path();
+        if (!fs::exists(dir)) {
+            fs::create_directories(dir);
+        }
+        
+        // Перемещаем файл
+        fs::rename(filePath, processedPath);
+        
+        stc::CompositeLogger::instance().debug(
+            "Moved file from " + filePath + " to " + processedPath + ", " + workerTag_
+        );
+        
+    } catch (const fs::filesystem_error& e) {
+        throw std::runtime_error(
+            "Failed to move file to processed directory: " + std::string(e.what())
+        );
+    }
+}
+
+void Worker::handleFileError(const std::string& filePath, const std::string& error) {
+    try {
+        if (!config_.bad_dir.empty()) {
+            fs::path inputFile(filePath);
+            std::string filename = inputFile.filename().string();
+            std::string badPath = (fs::path(config_.bad_dir) / filename).string();
+            
+            // Создаем директорию для ошибочных файлов
+            if (!fs::exists(config_.bad_dir)) {
+                fs::create_directories(config_.bad_dir);
+            }
+            
+            // Перемещаем файл в bad_dir
+            fs::rename(filePath, badPath);
+            
+            stc::CompositeLogger::instance().warning(
+                "Moved failed file to bad directory: " + badPath + ", " + workerTag_
+            );
+        }
+        
+        stc::CompositeLogger::instance().error(
+            "Failed to process file " + filePath + ": " + error + ", " + workerTag_
+        );
+        
+    } catch (const std::exception& e) {
+        stc::CompositeLogger::instance().error(
+            "Failed to handle file error: " + std::string(e.what()) + ", " + workerTag_
+        );
+    }
 }

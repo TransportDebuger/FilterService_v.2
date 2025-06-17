@@ -5,16 +5,13 @@
 #include "stc/MetricsCollector.hpp"
 #include "stc/SignalRouter.hpp"
 #include "../include/workercontainer.hpp"
-#include "../include/adapterfabric.hpp"
+#include "../include/AdapterFactory.hpp"
 
 class Master {
 public:
     enum class State { STOPPED, STARTING, RUNNING, RELOADING, FATAL };
     
-    explicit Master(
-        std::unique_ptr<AdapterFactory> factory,
-        std::function<nlohmann::json()> configProvider
-    );
+    explicit Master(std::function<nlohmann::json()> configProvider);
     ~Master();
 
     bool start();
@@ -31,7 +28,7 @@ private:
 
     WorkersContainer workers_;
     std::function<nlohmann::json()> getConfig_;
-    std::unique_ptr<AdapterFactory> factory_;
+    //std::unique_ptr<AdapterFactory> factory_;
     std::shared_ptr<stc::SignalRouter> signalRouter_;
     std::atomic<State> state_{State::STOPPED};
     mutable std::mutex configMutex_;

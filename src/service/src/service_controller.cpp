@@ -48,6 +48,7 @@ void ServiceController::initialize(const ParsedArgs& args) {
 
   // Регистрация обработчиков сигналов. За одно инициализируем синглтон SignalRouter.
   stc::SignalRouter::instance().registerHandler(SIGTERM, [this](int) { handleShutdown(); });
+  stc::SignalRouter::instance().registerHandler(SIGINT, [this](int) { handleShutdown(); });
   stc::SignalRouter::instance().registerHandler(SIGHUP, [this](int) {
     try {
       ConfigManager::instance().reload();
@@ -59,8 +60,12 @@ void ServiceController::initialize(const ParsedArgs& args) {
   });
 
   // Инициализация Master с dependency injection
-  auto factory = AdapterFactoryCreator::createFactory("local");
-  master_ = std::make_unique<Master>(std::move(factory));
+  //auto factory = AdapterFactoryCreator::createFactory("local");
+  master_ = std::make_unique<Master>(
+        [&args]() -> nlohmann::json { 
+            return ConfigManager::instance().getMergedConfig(args.environment);
+        }
+    );
   master_->start();
 }
 
