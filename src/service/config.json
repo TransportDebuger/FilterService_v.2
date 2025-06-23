@@ -1,89 +1,202 @@
 {
-    "defaults": {
-        "logging": {
-            "level": "info",
-            "max_file_size": 10485760
-        },
-        "sources": {
-            "file_mask": "*.xml",
-            "processed_dir": "/backup/processed",
-            "bad_dir": "/data/bad",
-            "excluded_dir": "/data/excluded",
-            "filtered_template": "{filename}_filtered.{ext}",
-            "excluded_template": "{filename}_excluded.{ext}"
-        }
+  "defaults": {
+    "logging": {
+      "level": "info",
+      "max_file_size": 10485760
     },
-    "environments": {
-        "development": {
-            "logging": [
-                {
-                    "type": "console",
-                    "level": "debug"
-                },
-                {
-                    "type": "sync_file",
-                    "level": "debug",
-                    "file": "dev_app.log"
-                }
-            ],
-            "sources": [
-                {
-                    "name": "local_xml",
-                    "type": "local",
-                    "path": "/data/incoming",
-                    "file_mask": "*.xml",
-                    "enabled": true,
-                    "filtering_enabled": true,
-                    "processed_dir": "/data/processed",
-                    "bad_dir": "/data/bad",
-                    "filtered_template": "{filename}_filtered.{ext}",
-                    "excluded_template": "{filename}_excluded.{ext}"
-                },
-                {
-                    "name": "ftp_backup",
-                    "type": "ftp",
-                    "path": "ftp://backup.example.com/incoming",
-                    "file_mask": "data_*.xml",
-                    "enabled": true,
-                    "filtering_enabled": false,
-                    "username": "@env('FTP_USERNAME')",
-                    "password": "@env('FTP_PASSWORD')",
-                    "port": 21,
-                    "processed_dir": "/backup/processed",
-                    "filtered_template": "processed/{filename}_filtered.{ext}",
-                    "excluded_template": "excluded/{filename}_excluded.{ext}"
-                }
-            ]
-        },
-        "production": {
-            "logging": [
-                {
-                    "type": "async_file",
-                    "level": "info",
-                    "file": "./prod_app.log"
-                },
-                {
-                    "type": "console",
-                    "level": "warning",
-                    "rotated": true
-                }
-            ],
-            "sources": [
-    {
-      "name": "local_xml_processor",
-      "type": "local",
-      "path": "/mnt/d/test/data/lookup",
+    "sources": {
       "file_mask": "*.xml",
-      "processed_dir": "/mnt/d/test/data/processed",
-      "excluded_dir": "/mnt/d/test/data/excluded",
-      "bad_dir": "/mnt/d/test/data/errors",
+      "processed_dir": "/backup/processed",
+      "bad_dir": "/data/bad",
+      "excluded_dir": "/data/excluded",
       "filtered_template": "{filename}_filtered.{ext}",
-      "filtering_enabled": true,
-      "check_interval": 10,
-      "enabled": true
+      "excluded_template": "{filename}_excluded.{ext}"
     }
-  ],
-            "comparison_list": "./comparison_list.csv"
+  },
+  "environments": {
+    "production": {
+      "logging": [
+        {
+          "type": "async_file",
+          "level": "debug",
+          "file": "./prod_app.log",
+          "rotated": true
+        },
+        {
+          "type": "console",
+          "level": "info"
         }
+      ],
+      "sources": [
+        {
+          "name": "local_bypass",
+          "type": "local",
+          "path": "/opt/test/data/bypass",
+          "file_mask": "*.xml",
+          "processed_dir": "/opt/test/data/processed",
+          "excluded_dir": "/opt/test/data/excluded",
+          "bad_dir": "/opt/test/data/bad",
+          "filtered_template": "{filename}.{ext}",
+          "filtering_enabled": false,
+          "check_interval": 10,
+          "enabled": true
+        },
+        {
+          "name": "local_ship_processing",
+          "type": "local",
+          "path": "/opt/test/data/ship",
+          "file_mask": "PD_SHIP*.xml",
+          "processed_dir": "/opt/test/data/processed",
+          "excluded_dir": "/opt/test/data/excluded",
+          "bad_dir": "/opt/test/data/bad",
+          "filtered_template": "{filename}_filtered.{ext}",
+          "excluded_template": "{filename}_excluded.{ext}",
+          "filtering_enabled": true,
+          "check_interval": 10,
+          "enabled": true,
+          "xml_filter": {
+            "auto_register_namespaces": true,
+            "namespaces": [
+              {
+                "prefix": "ns2",
+                "uri": "http://www.egis-otb.ru/data/pdp/"
+              },
+              {
+                "prefix": "ns4",
+                "uri": "http://www.egis-otb.ru/export/"
+              }
+            ],
+            "logic_operator": "WEIGHTED",
+            "threshold": 0.6,
+            "comparison_list": "./comparison_list.csv",
+            "criteria": [
+              {
+                "xpath": "//entry/docNumber",
+                "attribute": "value",
+                "csv_column": "ndoc",
+                "required": true,
+                "weight": 0.6
+              },
+              {
+                "xpath": "//entry/surname",
+                "attribute": "value",
+                "csv_column": "lname",
+                "required": true,
+                "weight": 0.2
+              }
+            ]
+          }
+        },
+        {
+          "name": "local_auto_processing",
+          "type": "local",
+          "path": "/opt/test/data/auto",
+          "file_mask": "PD_AUTO*.xml",
+          "processed_dir": "/opt/test/data/processed",
+          "excluded_dir": "/opt/test/data/excluded",
+          "bad_dir": "/opt/test/data/bad",
+          "filtered_template": "{filename}_filtered.{ext}",
+          "excluded_template": "{filename}_excluded.{ext}",
+          "filtering_enabled": true,
+          "check_interval": 10,
+          "enabled": true,
+          "xml_filter": {
+            "auto_register_namespaces": true,
+            "logic_operator": "WEIGHTED",
+            "threshold": 0.6,
+            "comparison_list": "./comparison_list.csv",
+            "criteria": [
+              {
+                "xpath": "//entry/docNumber",
+                "attribute": "value",
+                "csv_column": "ndoc",
+                "required": true,
+                "weight": 0.6
+              },
+              {
+                "xpath": "//entry/surname",
+                "attribute": "value",
+                "csv_column": "lname",
+                "required": true,
+                "weight": 0.2
+              }
+            ]
+          }
+        },
+        {
+          "name": "local_rail_processing",
+          "type": "local",
+          "path": "/opt/test/data/rail",
+          "file_mask": "PD_RAIL*.xml",
+          "processed_dir": "/opt/test/data/processed",
+          "excluded_dir": "/opt/test/data/excluded",
+          "bad_dir": "/opt/test/data/bad",
+          "filtered_template": "{filename}_filtered.{ext}",
+          "excluded_template": "{filename}_excluded.{ext}",
+          "filtering_enabled": true,
+          "check_interval": 10,
+          "enabled": true,
+          "xml_filter": {
+            "auto_register_namespaces": true,
+            "logic_operator": "WEIGHTED",
+            "threshold": 0.6,
+            "comparison_list": "./comparison_list.csv",
+            "criteria": [
+              {
+                "xpath": "//entry/docNumber",
+                "attribute": "value",
+                "csv_column": "ndoc",
+                "required": true,
+                "weight": 0.6
+              },
+              {
+                "xpath": "//entry/surname",
+                "attribute": "value",
+                "csv_column": "lname",
+                "required": true,
+                "weight": 0.2
+              }
+            ]
+          }
+        },
+        {
+          "name": "local_avia_processing",
+          "type": "local",
+          "path": "/opt/test/data/avia",
+          "file_mask": "PD_AVIA*.xml",
+          "processed_dir": "/opt/test/data/processed",
+          "excluded_dir": "/opt/test/data/excluded",
+          "bad_dir": "/opt/test/data/bad",
+          "filtered_template": "{filename}_filtered.{ext}",
+          "excluded_template": "{filename}_excluded.{ext}",
+          "filtering_enabled": true,
+          "check_interval": 10,
+          "enabled": true,
+          "xml_filter": {
+            "auto_register_namespaces": true,
+            "logic_operator": "WEIGHTED",
+            "threshold": 0.6,
+            "comparison_list": "./comparison_list.csv",
+            "criteria": [
+              {
+                "xpath": "//pnr/pdp/docNumber",
+                "attribute": "value",
+                "csv_column": "ndoc",
+                "required": true,
+                "weight": 0.6
+              },
+              {
+                "xpath": "//pdp/surname",
+                "attribute": "value",
+                "csv_column": "lname",
+                "required": true,
+                "weight": 0.2
+              }
+            ]
+          }
+        }
+      ],
+      "comparison_list": "./comparison_list.csv"
     }
+  }
 }
