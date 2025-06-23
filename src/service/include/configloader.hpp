@@ -22,7 +22,7 @@
  * внешняя синхронизация
  */
 class ConfigLoader {
- public:
+public:
   /**
    * @brief Загружает конфигурацию из указанного файла
    * @param filename Путь к JSON-файлу конфигурации
@@ -38,7 +38,7 @@ class ConfigLoader {
    *
    * @see ConfigManager::loadFromFile()
    */
-  nlohmann::json loadFromFile(const std::string& filename);
+  nlohmann::json loadFromFile(const std::string &filename);
 
   /**
    * @brief Перезагружает конфигурацию из последнего использованного файла
@@ -50,9 +50,9 @@ class ConfigLoader {
    * loader.reload(); // Перезагружает config.json
    * @endcode
    */
-  nlohmann::json reload(const std::string& currentFile);
+  nlohmann::json reload(const std::string &currentFile);
 
- private:
+private:
   /**
    * @brief Внутренний метод чтения содержимого файла
    * @param filename Путь к файлу для чтения
@@ -63,7 +63,7 @@ class ConfigLoader {
    * @note Использует стандартный парсер nlohmann/json
    * @warning Не обрабатывает кодировки, отличные от UTF-8
    */
-  nlohmann::json readFileContents(const std::string& filename) const;
+  nlohmann::json readFileContents(const std::string &filename) const;
 
-  std::string lastLoadedFile;  ///< Путь к последнему загруженному файлу
+  std::string lastLoadedFile; ///< Путь к последнему загруженному файлу
 };

@@ -11,7 +11,7 @@ const vector<string> ArgumentParser::validLogLevels = {
 const vector<string> ArgumentParser::validLogTypes = {"console", "sync_file",
                                                       "async_file"};
 
-ParsedArgs ArgumentParser::parse(int argc, char** argv) {
+ParsedArgs ArgumentParser::parse(int argc, char **argv) {
   ParsedArgs args;
 
   for (int i = 1; i < argc; ++i) {
@@ -42,7 +42,7 @@ ParsedArgs ArgumentParser::parse(int argc, char** argv) {
   return args;
 }
 
-void ArgumentParser::parseOverride(const string& arg, ParsedArgs& args) {
+void ArgumentParser::parseOverride(const string &arg, ParsedArgs &args) {
   size_t eqPos = arg.find('=');
   if (eqPos == string::npos) {
     throw invalid_argument(
@@ -61,8 +61,8 @@ void ArgumentParser::parseOverride(const string& arg, ParsedArgs& args) {
   args.overrides[key] = value;
 }
 
-void ArgumentParser::parseLogType(const string& arg, ParsedArgs& args, int& i,
-                                  int argc, char** argv) {
+void ArgumentParser::parseLogType(const string &arg, ParsedArgs &args, int &i,
+                                  int argc, char **argv) {
   size_t eqPos = arg.find('=');
   string value;
 
@@ -86,8 +86,8 @@ void ArgumentParser::parseLogType(const string& arg, ParsedArgs& args, int& i,
   }
 }
 
-void ArgumentParser::parseConfigFile(const string& arg, ParsedArgs& args,
-                                     int& i, int argc, char** argv) {
+void ArgumentParser::parseConfigFile(const string &arg, ParsedArgs &args,
+                                     int &i, int argc, char **argv) {
   size_t eqPos = arg.find('=');
 
   if (eqPos != string::npos) {
@@ -99,8 +99,8 @@ void ArgumentParser::parseConfigFile(const string& arg, ParsedArgs& args,
   }
 }
 
-void ArgumentParser::parseLogLevel(const string& arg, ParsedArgs& args, int& i,
-                                   int argc, char** argv) {
+void ArgumentParser::parseLogLevel(const string &arg, ParsedArgs &args, int &i,
+                                   int argc, char **argv) {
   size_t eqPos = arg.find('=');
 
   if (eqPos != string::npos) {
@@ -118,8 +118,8 @@ void ArgumentParser::parseLogLevel(const string& arg, ParsedArgs& args, int& i,
   }
 }
 
-void ArgumentParser::validateLogTypes(const vector<string>& types) {
-  for (const auto& type : types) {
+void ArgumentParser::validateLogTypes(const vector<string> &types) {
+  for (const auto &type : types) {
     if (find(validLogTypes.begin(), validLogTypes.end(), type) ==
         validLogTypes.end()) {
       throw invalid_argument("ArgumentParser: Invalid logger type: " + type);

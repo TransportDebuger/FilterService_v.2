@@ -3,7 +3,7 @@
 #include <string>
 
 class EnvironmentProcessor {
- public:
+public:
   /**
    * @brief Обрабатывает переменные окружения в JSON-конфигурации
    * @param config Ссылка на JSON-объект для модификации
@@ -11,7 +11,7 @@ class EnvironmentProcessor {
    * @note Рекурсивно обходит все узлы JSON, заменяя строки вида $ENV{VAR}
    *       на значения переменных окружения
    */
-  void process(nlohmann::json& config) const;
+  void process(nlohmann::json &config) const;
 
   /**
    * @brief Заменяет переменные окружения в строке
@@ -20,14 +20,14 @@ class EnvironmentProcessor {
    * @details Находит все вхождения шаблонов $ENV{...} и заменяет их
    *          на соответствующие значения переменных окружения
    */
-  void resolveVariable(std::string& value) const;
+  void resolveVariable(std::string &value) const;
 
- private:
+private:
   /**
    * @brief Рекурсивный обход JSON с применением функции к каждому узлу
    * @param node Текущий JSON-узел
    * @param func Функция для применения к строковым значениям
    */
-  void walkJson(nlohmann::json& node,
-                std::function<void(std::string&)> func) const;
+  void walkJson(nlohmann::json &node,
+                std::function<void(std::string &)> func) const;
 };

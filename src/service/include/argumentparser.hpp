@@ -14,20 +14,20 @@ struct ParsedArgs {
 };
 
 class ArgumentParser {
- public:
-  ParsedArgs parse(int argc, char** argv);
+public:
+  ParsedArgs parse(int argc, char **argv);
 
- private:
+private:
   static const std::vector<std::string> validLogLevels;
   static const std::vector<std::string> validLogTypes;
 
-  void parseOverride(const std::string& arg, ParsedArgs& args);
-  void parseLogType(const std::string& arg, ParsedArgs& args, int& i, int argc,
-                    char** argv);
-  void parseConfigFile(const std::string& arg, ParsedArgs& args, int& i,
-                       int argc, char** argv);
-  void parseLogLevel(const std::string& arg, ParsedArgs& args, int& i, int argc,
-                     char** argv);
-  void validateLogTypes(const std::vector<std::string>& types);
+  void parseOverride(const std::string &arg, ParsedArgs &args);
+  void parseLogType(const std::string &arg, ParsedArgs &args, int &i, int argc,
+                    char **argv);
+  void parseConfigFile(const std::string &arg, ParsedArgs &args, int &i,
+                       int argc, char **argv);
+  void parseLogLevel(const std::string &arg, ParsedArgs &args, int &i, int argc,
+                     char **argv);
+  void validateLogTypes(const std::vector<std::string> &types);
   void printHelp() const;
 };

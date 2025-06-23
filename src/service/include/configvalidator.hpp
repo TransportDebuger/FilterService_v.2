@@ -21,14 +21,14 @@
  * - Специфичные ограничения для разных типов источников
  */
 class ConfigValidator {
- public:
+public:
   /**
    * @brief Валидирует корневую структуру конфига
    * @param config Ссылка на JSON-объект конфигурации
    * @return true Если структура валидна
    * @throw std::runtime_error При нарушении структуры
    */
-  bool validateRoot(const nlohmann::json& config) const;
+  bool validateRoot(const nlohmann::json &config) const;
 
   /**
    * @brief Валидирует секцию источников
@@ -36,7 +36,7 @@ class ConfigValidator {
    * @return true Если все источники валидны
    * @throw std::runtime_error При ошибках в конфигурации источников
    */
-  bool validateSources(const nlohmann::json& sources) const;
+  bool validateSources(const nlohmann::json &sources) const;
 
   /**
    * @brief Валидирует настройки логирования
@@ -44,12 +44,12 @@ class ConfigValidator {
    * @return true Если настройки корректны
    * @throw std::runtime_error При недопустимых значениях
    */
-  bool validateLogging(const nlohmann::json& logging) const;
+  bool validateLogging(const nlohmann::json &logging) const;
 
- private:
+private:
   /**
    * @brief Проверяет обязательные поля для FTP/SFTP источников
    * @param source JSON-объект источника
    */
-  void validateFtpFields(const nlohmann::json& source) const;
+  void validateFtpFields(const nlohmann::json &source) const;
 };

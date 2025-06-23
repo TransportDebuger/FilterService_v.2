@@ -1,7 +1,7 @@
 #pragma once
+#include <atomic>
 #include <functional>
 #include <string>
-#include <atomic>
 #include <thread>
 
 #ifdef _WIN32
@@ -13,27 +13,27 @@
 
 class FileWatcher {
 public:
-    enum class Event { Created, Deleted, Modified, Renamed };
-    using Callback = std::function<void(Event, const std::string&)>;
+  enum class Event { Created, Deleted, Modified, Renamed };
+  using Callback = std::function<void(Event, const std::string &)>;
 
-    FileWatcher(const std::string& path, Callback callback);
-    ~FileWatcher();
+  FileWatcher(const std::string &path, Callback callback);
+  ~FileWatcher();
 
-    void start();
-    void stop();
+  void start();
+  void stop();
 
 private:
-    void run();
+  void run();
 
-    std::string path_;
-    Callback callback_;
-    std::atomic<bool> running_{false};
-    std::thread thread_;
+  std::string path_;
+  Callback callback_;
+  std::atomic<bool> running_{false};
+  std::thread thread_;
 
 #ifdef _WIN32
-    HANDLE dirHandle_ = INVALID_HANDLE_VALUE;
+  HANDLE dirHandle_ = INVALID_HANDLE_VALUE;
 #else
-    int inotifyFd_ = -1;
-    int watchDescriptor_ = -1;
+  int inotifyFd_ = -1;
+  int watchDescriptor_ = -1;
 #endif
 };

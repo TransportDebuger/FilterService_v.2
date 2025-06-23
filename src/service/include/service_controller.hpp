@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "stc/DaemonManager.hpp"
@@ -11,12 +13,12 @@
 #include "../include/master.hpp"
 
 class ServiceController {
- public:
-  int run(int argc, char** argv);
+public:
+  int run(int argc, char **argv);
 
- private:
-  void initialize(const ParsedArgs& args);
-  void initLogger(const ParsedArgs& args);
+private:
+  void initialize(const ParsedArgs &args);
+  void initLogger(const ParsedArgs &args);
   void mainLoop();
   void handleShutdown();
 
@@ -24,4 +26,7 @@ class ServiceController {
   std::unique_ptr<stc::DaemonManager> daemon_;
   std::string config_path_ = "config.json";
   std::atomic<bool> running_{false};
+
+  std::mutex mtx_;             // Мьютекс для condition_variable
+  std::condition_variable cv_; // Условная переменная для прерываемого ожидания
 };

@@ -1,8 +1,8 @@
 #pragma once
 #include <mutex>
 #include <nlohmann/json.hpp>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 
 #include "../include/configcache.hpp"
 #include "../include/configloader.hpp"
@@ -22,15 +22,15 @@
  * @warning Не потокобезопасен при одновременном вызове методов modify
  */
 class ConfigManager {
- public:
-  static ConfigManager& instance();
+public:
+  static ConfigManager &instance();
 
   /**
    * @brief Инициализирует конфигурацию из файла
    * @param filename Путь к JSON-файлу конфигурации
    * @throw std::runtime_error При ошибках загрузки/валидации
    */
-  void initialize(const std::string& filename);
+  void initialize(const std::string &filename);
 
   /**
    * @brief Считывает конфигурационный файл повторно.
@@ -42,22 +42,24 @@ class ConfigManager {
    * @param env Идентификатор окружения (development/production)
    * @return nlohmann::json Кешированный результат слияния
    */
-  nlohmann::json getMergedConfig(const std::string& env) const;
+  nlohmann::json getMergedConfig(const std::string &env) const;
+
+  std::string getGlobalComparisonList(const std::string &env) const;
 
   /**
    * @brief Применяет переопределения из CLI
    * @param overrides Маппинг ключ-значение для замены
    */
   void applyCliOverrides(
-      const std::unordered_map<std::string, std::string>& overrides);
+      const std::unordered_map<std::string, std::string> &overrides);
 
- private:
+private:
   ConfigManager() = default;
   ~ConfigManager() = default;
-  
+
   void backupCurrentConfig();
   void restoreBackupConfig();
-  bool validateConfigSafely(const nlohmann::json& config) const;
+  bool validateConfigSafely(const nlohmann::json &config) const;
 
   ConfigLoader loader_;
   ConfigValidator validator_;

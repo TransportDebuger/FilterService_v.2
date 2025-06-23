@@ -10,7 +10,7 @@
 
 #include "../include/service_controller.hpp"
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   ServiceController controller;
   return controller.run(argc, argv);
 }

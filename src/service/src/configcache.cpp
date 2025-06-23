@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-nlohmann::json ConfigCache::getCached(const std::string& env) const {
+nlohmann::json ConfigCache::getCached(const std::string &env) const {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
   if (!cachedConfig_.empty() && cachedConfig_.contains(env)) {
@@ -11,8 +11,8 @@ nlohmann::json ConfigCache::getCached(const std::string& env) const {
   return nlohmann::json();
 }
 
-void ConfigCache::updateCache(const std::string& env,
-                              const nlohmann::json& config) {
+void ConfigCache::updateCache(const std::string &env,
+                              const nlohmann::json &config) {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
   if (config.is_null() || !config.is_object()) {
@@ -26,6 +26,6 @@ void ConfigCache::updateCache(const std::string& env,
 }
 
 void ConfigCache::clearAll() {
-    std::lock_guard<std::mutex> lock(cacheMutex_);
-    cachedConfig_.clear();
+  std::lock_guard<std::mutex> lock(cacheMutex_);
+  cachedConfig_.clear();
 }
