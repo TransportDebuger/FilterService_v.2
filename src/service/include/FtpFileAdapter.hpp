@@ -7,16 +7,18 @@
  */
 
 #pragma once
-#include "../include/filestorageinterface.hpp"
-#include "../include/sourceconfig.hpp"
+#include <curl/curl.h>
+
 #include <atomic>
 #include <chrono>
-#include <curl/curl.h>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
+
+#include "../include/filestorageinterface.hpp"
+#include "../include/sourceconfig.hpp"
 
 namespace fs = std::filesystem;
 
@@ -29,7 +31,7 @@ namespace fs = std::filesystem;
  * @warning Требует установленной библиотеки libcurl
  */
 class FtpFileAdapter : public FileStorageInterface {
-public:
+ public:
   /**
    * @brief Конструктор с конфигурацией источника
    * @param config Конфигурация FTP-источника данных
@@ -63,7 +65,7 @@ public:
   // Управление коллбэками
   void setCallback(FileDetectedCallback callback) override;
 
-private:
+ private:
   /**
    * @brief Структура для хранения данных ответа от сервера
    */
@@ -136,18 +138,18 @@ private:
    */
   void compareFilesList(const std::vector<std::string> &currentFiles);
 
-  SourceConfig config_;  ///< Конфигурация источника
-  std::string ftpUrl_;   ///< Базовый FTP URL
-  std::string server_;   ///< Имя или IP сервера
-  std::string username_; ///< Имя пользователя
-  std::string password_; ///< Пароль
-  int port_;             ///< Порт FTP-сервера
+  SourceConfig config_;   ///< Конфигурация источника
+  std::string ftpUrl_;    ///< Базовый FTP URL
+  std::string server_;    ///< Имя или IP сервера
+  std::string username_;  ///< Имя пользователя
+  std::string password_;  ///< Пароль
+  int port_;              ///< Порт FTP-сервера
 
-  std::atomic<bool> connected_{false};  ///< Статус соединения
-  std::atomic<bool> monitoring_{false}; ///< Статус мониторинга
-  mutable std::mutex mutex_; ///< Мьютекс для потокобезопасности
+  std::atomic<bool> connected_{false};   ///< Статус соединения
+  std::atomic<bool> monitoring_{false};  ///< Статус мониторинга
+  mutable std::mutex mutex_;  ///< Мьютекс для потокобезопасности
 
-  std::thread monitoringThread_; ///< Поток мониторинга
-  std::vector<std::string> lastFilesList_; ///< Предыдущий список файлов
-  std::chrono::seconds pollingInterval_; ///< Интервал опроса
+  std::thread monitoringThread_;  ///< Поток мониторинга
+  std::vector<std::string> lastFilesList_;  ///< Предыдущий список файлов
+  std::chrono::seconds pollingInterval_;  ///< Интервал опроса
 };

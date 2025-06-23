@@ -21,7 +21,7 @@
  * - Специфичные ограничения для разных типов источников
  */
 class ConfigValidator {
-public:
+ public:
   /**
    * @brief Валидирует корневую структуру конфига
    * @param config Ссылка на JSON-объект конфигурации
@@ -46,7 +46,7 @@ public:
    */
   bool validateLogging(const nlohmann::json &logging) const;
 
-private:
+ private:
   /**
    * @brief Проверяет обязательные поля для FTP/SFTP источников
    * @param source JSON-объект источника

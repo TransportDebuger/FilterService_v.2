@@ -32,7 +32,7 @@ namespace fs = std::filesystem;
  *       и обеспечивает потокобезопасное управление жизненным циклом [25][28]
  */
 class Worker {
-public:
+ public:
   /**
    * @brief Конструктор с конфигурацией источника
    * @param config Конфигурация источника данных
@@ -62,7 +62,7 @@ public:
   // Доступ к конфигурации
   const SourceConfig &getConfig() const noexcept { return config_; }
 
-private:
+ private:
   /**
    * @brief Основной цикл обработки файлов
    */
@@ -110,26 +110,26 @@ private:
   void handleFileError(const std::string &filePath, const std::string &error);
 
   // Конфигурация и идентификация
-  SourceConfig config_; ///< Конфигурация источника
-  pid_t pid_; ///< PID процесса для идентификации
-  std::string workerTag_; ///< Тег воркера для логирования
+  SourceConfig config_;  ///< Конфигурация источника
+  pid_t pid_;  ///< PID процесса для идентификации
+  std::string workerTag_;  ///< Тег воркера для логирования
   static std::atomic<int> instanceCounter_;
   // Адаптер хранилища
   std::unique_ptr<FileStorageInterface>
-      adapter_; ///< Адаптер файлового хранилища
+      adapter_;  ///< Адаптер файлового хранилища
 
   // Состояние воркера [28]
-  std::atomic<bool> running_{false};    ///< Флаг активности
-  std::atomic<bool> paused_{false};     ///< Флаг паузы
-  std::atomic<bool> processing_{false}; ///< Флаг обработки файла
+  std::atomic<bool> running_{false};  ///< Флаг активности
+  std::atomic<bool> paused_{false};   ///< Флаг паузы
+  std::atomic<bool> processing_{false};  ///< Флаг обработки файла
 
   // Многопоточность [24][25]
-  std::thread worker_thread_;      ///< Рабочий поток
-  mutable std::mutex state_mutex_; ///< Мьютекс состояния
-  std::condition_variable cv_; ///< Условная переменная для паузы
+  std::thread worker_thread_;       ///< Рабочий поток
+  mutable std::mutex state_mutex_;  ///< Мьютекс состояния
+  std::condition_variable cv_;  ///< Условная переменная для паузы
 
   // Метрики
-  std::chrono::steady_clock::time_point start_time_; ///< Время запуска
-  std::atomic<size_t> files_processed_{0}; ///< Количество обработанных файлов
-  std::atomic<size_t> files_failed_{0}; ///< Количество файлов с ошибками
+  std::chrono::steady_clock::time_point start_time_;  ///< Время запуска
+  std::atomic<size_t> files_processed_{0};  ///< Количество обработанных файлов
+  std::atomic<size_t> files_failed_{0};  ///< Количество файлов с ошибками
 };

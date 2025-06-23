@@ -10,24 +10,26 @@
  */
 #pragma once
 
-#include "../include/FilterListManager.hpp"
-#include "../include/sourceconfig.hpp"
-#include <filesystem>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
+
+#include <filesystem>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "../include/FilterListManager.hpp"
+#include "../include/sourceconfig.hpp"
+
 class XMLProcessor {
-public:
+ public:
   explicit XMLProcessor(const SourceConfig &config);
   bool process(const std::string &xmlPath);
 
-private:
+ private:
   const SourceConfig &config_;
 
   // Основные методы обработки

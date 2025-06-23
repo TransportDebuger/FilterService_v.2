@@ -7,16 +7,17 @@
  */
 
 #pragma once
-#include "../include/FtpFileAdapter.hpp"
-#include "../include/LocalStorageAdapter.hpp"
-#include "../include/SmbFileAdapter.hpp"
-#include "../include/filestorageinterface.hpp"
-#include "../include/sourceconfig.hpp"
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+
+#include "../include/FtpFileAdapter.hpp"
+#include "../include/LocalStorageAdapter.hpp"
+#include "../include/SmbFileAdapter.hpp"
+#include "../include/filestorageinterface.hpp"
+#include "../include/sourceconfig.hpp"
 
 /**
  * @class AdapterFactory
@@ -26,7 +27,7 @@
  *       новых типов адаптеров во время выполнения[14][15]
  */
 class AdapterFactory {
-public:
+ public:
   /// Тип функции-фабрики для создания адаптеров
   using CreatorFunction = std::function<std::unique_ptr<FileStorageInterface>(
       const SourceConfig &)>;
@@ -47,8 +48,8 @@ public:
    * @note Использует smart pointers для автоматического управления
    * памятью[27][28]
    */
-  std::unique_ptr<FileStorageInterface>
-  createAdapter(const SourceConfig &config);
+  std::unique_ptr<FileStorageInterface> createAdapter(
+      const SourceConfig &config);
 
   /**
    * @brief Регистрирует новый тип адаптера в фабрике
@@ -72,7 +73,7 @@ public:
    */
   std::vector<std::string> getSupportedTypes() const;
 
-private:
+ private:
   AdapterFactory();
   ~AdapterFactory() = default;
 
@@ -93,9 +94,9 @@ private:
    * @param required_fields Список обязательных полей
    * @throw std::invalid_argument При отсутствии обязательных полей
    */
-  void
-  validateRequiredFields(const SourceConfig &config,
-                         const std::vector<std::string> &required_fields) const;
+  void validateRequiredFields(
+      const SourceConfig &config,
+      const std::vector<std::string> &required_fields) const;
 
   /// Реестр зарегистрированных типов адаптеров
   std::unordered_map<std::string, CreatorFunction> creators_;

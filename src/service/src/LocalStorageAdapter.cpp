@@ -4,14 +4,15 @@
  */
 
 #include "../include/LocalStorageAdapter.hpp"
-#include "stc/compositelogger.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <regex>
 
+#include "stc/compositelogger.hpp"
+
 LocalStorageAdapter::LocalStorageAdapter(const SourceConfig &config)
     : config_(config) {
-
   validatePath(config_.path);
 
   if (config_.file_mask.empty()) {
@@ -32,8 +33,8 @@ LocalStorageAdapter::~LocalStorageAdapter() {
   }
 }
 
-std::vector<std::string>
-LocalStorageAdapter::listFiles(const std::string &path) {
+std::vector<std::string> LocalStorageAdapter::listFiles(
+    const std::string &path) {
   std::vector<std::string> files;
 
   try {
@@ -146,8 +147,7 @@ void LocalStorageAdapter::connect() {
 void LocalStorageAdapter::disconnect() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!connected_)
-    return;
+  if (!connected_) return;
 
   stopMonitoring();
   connected_ = false;
@@ -195,8 +195,7 @@ void LocalStorageAdapter::startMonitoring() {
 void LocalStorageAdapter::stopMonitoring() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!monitoring_)
-    return;
+  if (!monitoring_) return;
 
   if (watcher_) {
     watcher_->stop();
@@ -261,7 +260,7 @@ bool LocalStorageAdapter::matchesFileMask(const std::string &filename) const {
     // Преобразуем маску в регулярное выражение
     std::string pattern;
     pattern.reserve(config_.file_mask.size() *
-                    2); // Резервируем память с запасом
+                    2);  // Резервируем память с запасом
 
     // Специальные символы регулярных выражений, которые нужно экранировать
     const std::string special_chars = "\\^$.|?*+()[]{}-";
@@ -315,6 +314,6 @@ bool LocalStorageAdapter::matchesFileMask(const std::string &filename) const {
     stc::CompositeLogger::instance().warning(
         "Invalid file mask regex: '" + config_.file_mask +
         "', error: " + std::string(e.what()));
-    return true; // В случае ошибки пропускаем все файлы
+    return true;  // В случае ошибки пропускаем все файлы
   }
 }

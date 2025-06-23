@@ -24,7 +24,7 @@
  * @warning Все методы должны быть потокобезопасными в реализациях
  */
 class FileStorageInterface {
-public:
+ public:
   /// Тип коллбэка для обработки обнаруженных файлов
   using FileDetectedCallback = std::function<void(const std::string &)>;
 
@@ -119,7 +119,7 @@ public:
    */
   virtual void setCallback(FileDetectedCallback callback) = 0;
 
-protected:
+ protected:
   /**
    * @brief Валидирует путь к файлу
    * @param path Проверяемый путь
@@ -137,5 +137,5 @@ protected:
   }
 
   FileDetectedCallback
-      onFileDetected_; ///< Коллбэк для уведомлений о новых файлах
+      onFileDetected_;  ///< Коллбэк для уведомлений о новых файлах
 };

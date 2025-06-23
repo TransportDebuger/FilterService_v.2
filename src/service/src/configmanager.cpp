@@ -85,8 +85,8 @@ nlohmann::json ConfigManager::getMergedConfig(const std::string &env) const {
   return merged;
 }
 
-std::string
-ConfigManager::getGlobalComparisonList(const std::string &env) const {
+std::string ConfigManager::getGlobalComparisonList(
+    const std::string &env) const {
   auto config = getMergedConfig(env);
   return config.value("comparison_list", "./comparison_list.csv");
 }

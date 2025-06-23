@@ -3,10 +3,12 @@
  * @brief Реализация менеджера централизованного управления списками фильтрации
  */
 #include "../include/FilterListManager.hpp"
-#include "stc/SignalRouter.hpp"
+
 #include <codecvt>
 #include <filesystem>
 #include <locale>
+
+#include "stc/SignalRouter.hpp"
 
 namespace fs = std::filesystem;
 
@@ -175,7 +177,7 @@ void FilterListManager::loadCsvData() {
     lineNumber++;
 
     if (line.empty() || line[0] == '#') {
-      continue; // Пропускаем пустые строки и комментарии
+      continue;  // Пропускаем пустые строки и комментарии
     }
 
     auto values = parseCsvLine(line);
@@ -227,8 +229,8 @@ void FilterListManager::loadCsvData() {
       "CSV data loaded: " + std::to_string(lineNumber) + " lines processed");
 }
 
-std::vector<std::string>
-FilterListManager::parseCsvLine(const std::string &line) const {
+std::vector<std::string> FilterListManager::parseCsvLine(
+    const std::string &line) const {
   std::vector<std::string> result;
   std::string current;
   bool inQuotes = false;
@@ -252,7 +254,7 @@ FilterListManager::parseCsvLine(const std::string &line) const {
       if (inQuotes && i + 1 < line.length() && line[i + 1] == '"') {
         // Экранированная кавычка ""
         current += '"';
-        ++i; // Пропускаем следующую кавычку
+        ++i;  // Пропускаем следующую кавычку
       } else {
         inQuotes = !inQuotes;
       }

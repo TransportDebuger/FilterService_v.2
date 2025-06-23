@@ -32,8 +32,7 @@ void EnvironmentProcessor::resolveVariable(std::string &value) const {
 
   while ((start_pos = value.find(prefix, start_pos)) != string::npos) {
     size_t end_pos = value.find('}', start_pos + prefix.length());
-    if (end_pos == string::npos)
-      break;
+    if (end_pos == string::npos) break;
 
     string var_name = value.substr(start_pos + prefix.length(),
                                    end_pos - start_pos - prefix.length());

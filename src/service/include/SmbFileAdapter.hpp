@@ -7,15 +7,16 @@
  */
 
 #pragma once
-#include "../include/filestorageinterface.hpp"
-#include "../include/filewatcher.hpp"
-#include "../include/sourceconfig.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <thread>
+
+#include "../include/filestorageinterface.hpp"
+#include "../include/filewatcher.hpp"
+#include "../include/sourceconfig.hpp"
 
 namespace fs = std::filesystem;
 
@@ -28,7 +29,7 @@ namespace fs = std::filesystem;
  * @warning Требует установленного пакета cifs-utils и прав для монтирования
  */
 class SmbFileAdapter : public FileStorageInterface {
-public:
+ public:
   /**
    * @brief Конструктор с конфигурацией источника
    * @param config Конфигурация SMB-источника данных
@@ -62,7 +63,7 @@ public:
   // Управление коллбэками
   void setCallback(FileDetectedCallback callback) override;
 
-private:
+ private:
   /**
    * @brief Монтирует SMB-ресурс в локальную директорию
    * @throw std::runtime_error При ошибках монтирования
@@ -113,19 +114,19 @@ private:
    */
   void validateSmbConfig() const;
 
-  SourceConfig config_; ///< Конфигурация источника
-  std::string mountPoint_; ///< Точка монтирования SMB-ресурса
-  std::string smbUrl_; ///< URL SMB-ресурса (//server/share)
-  std::unique_ptr<FileWatcher> watcher_; ///< Монитор файловой системы
-  std::atomic<bool> connected_{false};  ///< Статус соединения
-  std::atomic<bool> monitoring_{false}; ///< Статус мониторинга
-  std::atomic<bool> mounted_{false}; ///< Статус монтирования
-  mutable std::mutex mutex_; ///< Мьютекс для потокобезопасности
+  SourceConfig config_;  ///< Конфигурация источника
+  std::string mountPoint_;  ///< Точка монтирования SMB-ресурса
+  std::string smbUrl_;  ///< URL SMB-ресурса (//server/share)
+  std::unique_ptr<FileWatcher> watcher_;  ///< Монитор файловой системы
+  std::atomic<bool> connected_{false};   ///< Статус соединения
+  std::atomic<bool> monitoring_{false};  ///< Статус мониторинга
+  std::atomic<bool> mounted_{false};  ///< Статус монтирования
+  mutable std::mutex mutex_;  ///< Мьютекс для потокобезопасности
 
   // SMB-специфичные параметры
-  std::string username_; ///< Имя пользователя
-  std::string password_; ///< Пароль
-  std::string domain_;   ///< Домен (workgroup)
-  std::string server_;   ///< Имя или IP сервера
-  std::string share_;    ///< Имя общего ресурса
+  std::string username_;  ///< Имя пользователя
+  std::string password_;  ///< Пароль
+  std::string domain_;    ///< Домен (workgroup)
+  std::string server_;    ///< Имя или IP сервера
+  std::string share_;     ///< Имя общего ресурса
 };

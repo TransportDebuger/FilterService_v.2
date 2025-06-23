@@ -7,13 +7,14 @@
  */
 
 #pragma once
-#include "../include/filestorageinterface.hpp"
-#include "../include/filewatcher.hpp"
-#include "../include/sourceconfig.hpp"
 #include <atomic>
 #include <filesystem>
 #include <memory>
 #include <mutex>
+
+#include "../include/filestorageinterface.hpp"
+#include "../include/filewatcher.hpp"
+#include "../include/sourceconfig.hpp"
 
 namespace fs = std::filesystem;
 
@@ -25,7 +26,7 @@ namespace fs = std::filesystem;
  *       в директории и поддерживает SMB/CIFS через смонтированные ресурсы
  */
 class LocalStorageAdapter : public FileStorageInterface {
-public:
+ public:
   /**
    * @brief Конструктор с конфигурацией источника
    * @param config Конфигурация источника данных
@@ -59,7 +60,7 @@ public:
   // Управление коллбэками
   void setCallback(FileDetectedCallback callback) override;
 
-private:
+ private:
   /**
    * @brief Проверяет доступность пути и создает недостающие директории
    * @throw std::runtime_error При недоступности пути
@@ -80,9 +81,9 @@ private:
    */
   bool matchesFileMask(const std::string &filename) const;
 
-  SourceConfig config_; ///< Конфигурация источника
-  std::unique_ptr<FileWatcher> watcher_; ///< Монитор файловой системы
-  std::atomic<bool> connected_{false};  ///< Статус соединения
-  std::atomic<bool> monitoring_{false}; ///< Статус мониторинга
-  mutable std::mutex mutex_; ///< Мьютекс для потокобезопасности
+  SourceConfig config_;  ///< Конфигурация источника
+  std::unique_ptr<FileWatcher> watcher_;  ///< Монитор файловой системы
+  std::atomic<bool> connected_{false};   ///< Статус соединения
+  std::atomic<bool> monitoring_{false};  ///< Статус мониторинга
+  mutable std::mutex mutex_;  ///< Мьютекс для потокобезопасности
 };

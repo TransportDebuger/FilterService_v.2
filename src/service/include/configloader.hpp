@@ -22,7 +22,7 @@
  * внешняя синхронизация
  */
 class ConfigLoader {
-public:
+ public:
   /**
    * @brief Загружает конфигурацию из указанного файла
    * @param filename Путь к JSON-файлу конфигурации
@@ -52,7 +52,7 @@ public:
    */
   nlohmann::json reload(const std::string &currentFile);
 
-private:
+ private:
   /**
    * @brief Внутренний метод чтения содержимого файла
    * @param filename Путь к файлу для чтения
@@ -65,5 +65,5 @@ private:
    */
   nlohmann::json readFileContents(const std::string &filename) const;
 
-  std::string lastLoadedFile; ///< Путь к последнему загруженному файлу
+  std::string lastLoadedFile;  ///< Путь к последнему загруженному файлу
 };

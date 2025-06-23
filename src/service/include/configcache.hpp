@@ -4,7 +4,7 @@
 #include <string>
 
 class ConfigCache {
-public:
+ public:
   /**
    * @brief Получает закешированную конфигурацию для указанного окружения
    * @param env Идентификатор окружения (например "production")
@@ -24,7 +24,7 @@ public:
    */
   void clearAll();
 
-private:
-  mutable std::mutex cacheMutex_; ///< Мьютекс для синхронизации доступа
-  nlohmann::json cachedConfig_; ///< Кешированные данные конфигурации
+ private:
+  mutable std::mutex cacheMutex_;  ///< Мьютекс для синхронизации доступа
+  nlohmann::json cachedConfig_;  ///< Кешированные данные конфигурации
 };

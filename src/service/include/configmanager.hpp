@@ -22,7 +22,7 @@
  * @warning Не потокобезопасен при одновременном вызове методов modify
  */
 class ConfigManager {
-public:
+ public:
   static ConfigManager &instance();
 
   /**
@@ -53,7 +53,7 @@ public:
   void applyCliOverrides(
       const std::unordered_map<std::string, std::string> &overrides);
 
-private:
+ private:
   ConfigManager() = default;
   ~ConfigManager() = default;
 

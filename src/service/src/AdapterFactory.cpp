@@ -4,9 +4,11 @@
  */
 
 #include "../include/AdapterFactory.hpp"
-#include "stc/compositelogger.hpp"
+
 #include <algorithm>
 #include <mutex>
+
+#include "stc/compositelogger.hpp"
 
 AdapterFactory::AdapterFactory() {
   registerBuiltinAdapters();
@@ -18,8 +20,8 @@ AdapterFactory &AdapterFactory::instance() {
   return instance;
 }
 
-std::unique_ptr<FileStorageInterface>
-AdapterFactory::createAdapter(const SourceConfig &config) {
+std::unique_ptr<FileStorageInterface> AdapterFactory::createAdapter(
+    const SourceConfig &config) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   if (config.type.empty()) {
@@ -122,7 +124,6 @@ void AdapterFactory::registerBuiltinAdapters() {
 void AdapterFactory::validateRequiredFields(
     const SourceConfig &config,
     const std::vector<std::string> &required_fields) const {
-
   for (const auto &field : required_fields) {
     if (config.params.find(field) == config.params.end() ||
         config.params.at(field).empty()) {

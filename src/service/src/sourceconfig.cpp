@@ -4,6 +4,7 @@
  */
 
 #include "../include/sourceconfig.hpp"
+
 #include <filesystem>
 #include <regex>
 #include <stdexcept>
@@ -152,10 +153,8 @@ nlohmann::json SourceConfig::toJson() const {
   j["processed_dir"] = processed_dir;
 
   // Опциональные поля
-  if (!bad_dir.empty())
-    j["bad_dir"] = bad_dir;
-  if (!excluded_dir.empty())
-    j["excluded_dir"] = excluded_dir;
+  if (!bad_dir.empty()) j["bad_dir"] = bad_dir;
+  if (!excluded_dir.empty()) j["excluded_dir"] = excluded_dir;
   j["filtered_template"] = filtered_template;
   j["excluded_template"] = excluded_template;
   j["comparison_list"] = comparison_list;
@@ -194,8 +193,7 @@ nlohmann::json SourceConfig::toJson() const {
     for (const auto &crit : xml_filter.criteria) {
       nlohmann::json criterion;
       criterion["xpath"] = crit.xpath;
-      if (!crit.attribute.empty())
-        criterion["attribute"] = crit.attribute;
+      if (!crit.attribute.empty()) criterion["attribute"] = crit.attribute;
       criterion["csv_column"] = crit.csv_column;
       criterion["required"] = crit.required;
       criterion["weight"] = crit.weight;
@@ -300,13 +298,13 @@ void SourceConfig::validate() const {
   }
 }
 
-std::string
-SourceConfig::getFilteredFileName(const std::string &original_filename) const {
+std::string SourceConfig::getFilteredFileName(
+    const std::string &original_filename) const {
   return applyTemplate(original_filename, filtered_template);
 }
 
-std::string
-SourceConfig::getExcludedFileName(const std::string &original_filename) const {
+std::string SourceConfig::getExcludedFileName(
+    const std::string &original_filename) const {
   return applyTemplate(original_filename, excluded_template);
 }
 

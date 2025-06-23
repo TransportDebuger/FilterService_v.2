@@ -5,18 +5,17 @@
 #include <mutex>
 #include <string>
 
-#include "stc/DaemonManager.hpp"
-#include "stc/SignalRouter.hpp"
-
 #include "../include/argumentparser.hpp"
 #include "../include/configmanager.hpp"
 #include "../include/master.hpp"
+#include "stc/DaemonManager.hpp"
+#include "stc/SignalRouter.hpp"
 
 class ServiceController {
-public:
+ public:
   int run(int argc, char **argv);
 
-private:
+ private:
   void initialize(const ParsedArgs &args);
   void initLogger(const ParsedArgs &args);
   void mainLoop();
@@ -27,6 +26,6 @@ private:
   std::string config_path_ = "config.json";
   std::atomic<bool> running_{false};
 
-  std::mutex mtx_;             // Мьютекс для condition_variable
-  std::condition_variable cv_; // Условная переменная для прерываемого ожидания
+  std::mutex mtx_;              // Мьютекс для condition_variable
+  std::condition_variable cv_;  // Условная переменная для прерываемого ожидания
 };

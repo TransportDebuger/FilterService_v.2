@@ -4,16 +4,18 @@
  */
 
 #include "../include/worker.hpp"
-#include "../include/XMLProcessor.hpp"
+
+#include <openssl/evp.h>
+
 #include <fstream>
 #include <iomanip>
-#include <openssl/evp.h>
 #include <sstream>
+
+#include "../include/XMLProcessor.hpp"
 
 std::atomic<int> Worker::instanceCounter_{0};
 
 Worker::Worker(const SourceConfig &config) : config_(config), pid_(::getpid()) {
-
   int id = instanceCounter_.fetch_add(1, std::memory_order_relaxed);
   workerTag_ = config_.name + "#" + std::to_string(id);
 
@@ -99,8 +101,7 @@ void Worker::start() {
 void Worker::stop() {
   std::lock_guard<std::mutex> lock(state_mutex_);
 
-  if (!running_)
-    return;
+  if (!running_) return;
 
   running_ = false;
   paused_ = false;
@@ -123,8 +124,7 @@ void Worker::stop() {
 void Worker::pause() {
   std::lock_guard<std::mutex> lock(state_mutex_);
 
-  if (!running_ || paused_)
-    return;
+  if (!running_ || paused_) return;
 
   paused_ = true;
   stc::CompositeLogger::instance().info("Worker paused, " + workerTag_);
@@ -133,8 +133,7 @@ void Worker::pause() {
 void Worker::resume() {
   std::lock_guard<std::mutex> lock(state_mutex_);
 
-  if (!running_ || !paused_)
-    return;
+  if (!running_ || !paused_) return;
 
   paused_ = false;
   cv_.notify_all();
@@ -151,8 +150,7 @@ void Worker::restart() {
 }
 
 void Worker::stopGracefully() {
-  if (!running_)
-    return;
+  if (!running_) return;
 
   // Ожидаем завершения текущей обработки
   while (processing_) {
@@ -205,7 +203,7 @@ void Worker::run() {
 
 void Worker::processFile(const std::string &filePath) {
   if (!running_ || paused_)
-    return; // Если воркер остановлен или на паузе, ничего не делаем
+    return;  // Если воркер остановлен или на паузе, ничего не делаем
 
   processing_ = true;
   auto start_time = std::chrono::steady_clock::now();
@@ -213,7 +211,7 @@ void Worker::processFile(const std::string &filePath) {
   try {
     stc::CompositeLogger::instance().debug(
         "Processing file: " + filePath + ", " +
-        workerTag_ // Логируем начало обработки
+        workerTag_  // Логируем начало обработки
     );
 
     // Проверка существования файла

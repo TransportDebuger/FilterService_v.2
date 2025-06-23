@@ -15,8 +15,8 @@ nlohmann::json ConfigLoader::reload(const std::string &currentFile) {
   return readFileContents(currentFile);
 }
 
-nlohmann::json
-ConfigLoader::readFileContents(const std::string &filename) const {
+nlohmann::json ConfigLoader::readFileContents(
+    const std::string &filename) const {
   std::ifstream file(filename);
 
   if (!file.is_open()) {

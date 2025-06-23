@@ -3,7 +3,7 @@
 #include <string>
 
 class EnvironmentProcessor {
-public:
+ public:
   /**
    * @brief Обрабатывает переменные окружения в JSON-конфигурации
    * @param config Ссылка на JSON-объект для модификации
@@ -22,7 +22,7 @@ public:
    */
   void resolveVariable(std::string &value) const;
 
-private:
+ private:
   /**
    * @brief Рекурсивный обход JSON с применением функции к каждому узлу
    * @param node Текущий JSON-узел

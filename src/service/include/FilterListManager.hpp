@@ -12,7 +12,6 @@
  */
 #pragma once
 
-#include "stc/compositelogger.hpp"
 #include <algorithm>
 #include <fstream>
 #include <shared_mutex>
@@ -21,6 +20,8 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+
+#include "stc/compositelogger.hpp"
 
 /**
  * @class FilterListManager
@@ -37,7 +38,7 @@
  * @warning Класс не копируемый и не перемещаемый (Singleton pattern)
  */
 class FilterListManager {
-public:
+ public:
   /**
    * @brief Получить единственный экземпляр менеджера (Singleton)
    * @return FilterListManager& Ссылка на экземпляр синглтона
@@ -121,7 +122,7 @@ public:
    */
   std::string getCurrentCsvPath() const;
 
-private:
+ private:
   /**
    * @brief Приватный конструктор (Singleton pattern)
    */

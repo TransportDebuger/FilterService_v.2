@@ -4,17 +4,19 @@
  */
 
 #include "../include/SmbFileAdapter.hpp"
-#include "stc/compositelogger.hpp"
-#include <algorithm>
-#include <cstdlib>
-#include <fstream>
-#include <regex>
+
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-SmbFileAdapter::SmbFileAdapter(const SourceConfig &config) : config_(config) {
+#include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <regex>
 
+#include "stc/compositelogger.hpp"
+
+SmbFileAdapter::SmbFileAdapter(const SourceConfig &config) : config_(config) {
   validatePath(config_.path);
   validateSmbConfig();
 
@@ -31,18 +33,16 @@ SmbFileAdapter::SmbFileAdapter(const SourceConfig &config) : config_(config) {
 
   // Извлечение параметров подключения
   auto it = config_.params.find("username");
-  if (it != config_.params.end())
-    username_ = it->second;
+  if (it != config_.params.end()) username_ = it->second;
 
   it = config_.params.find("password");
-  if (it != config_.params.end())
-    password_ = it->second;
+  if (it != config_.params.end()) password_ = it->second;
 
   it = config_.params.find("domain");
   if (it != config_.params.end())
     domain_ = it->second;
   else
-    domain_ = "WORKGROUP"; // Значение по умолчанию
+    domain_ = "WORKGROUP";  // Значение по умолчанию
 
   stc::CompositeLogger::instance().info("SmbFileAdapter created for: " +
                                         smbUrl_);
@@ -205,8 +205,7 @@ void SmbFileAdapter::connect() {
 void SmbFileAdapter::disconnect() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!connected_)
-    return;
+  if (!connected_) return;
 
   stopMonitoring();
   unmountSmbResource();
@@ -257,8 +256,7 @@ void SmbFileAdapter::startMonitoring() {
 void SmbFileAdapter::stopMonitoring() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!monitoring_)
-    return;
+  if (!monitoring_) return;
 
   if (watcher_) {
     watcher_->stop();
@@ -299,8 +297,7 @@ void SmbFileAdapter::mountSmbResource() {
 }
 
 void SmbFileAdapter::unmountSmbResource() {
-  if (!mounted_ || mountPoint_.empty())
-    return;
+  if (!mounted_ || mountPoint_.empty()) return;
 
   try {
     std::string umountCommand = "umount " + mountPoint_;
@@ -433,8 +430,7 @@ std::string SmbFileAdapter::buildMountCommand() const {
 
   // Объединяем опции
   for (size_t i = 0; i < options.size(); ++i) {
-    if (i > 0)
-      command += ",";
+    if (i > 0) command += ",";
     command += options[i];
   }
 

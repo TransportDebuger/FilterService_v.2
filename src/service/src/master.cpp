@@ -1,4 +1,5 @@
 #include "../include/master.hpp"
+
 #include "stc/CompositeLogger.hpp"
 
 Master::Master(std::function<nlohmann::json()> configProvider)
@@ -71,12 +72,11 @@ void Master::reload() {
     workers_.access([&](auto &workers) {
       for (const auto &src : config["sources"]) {
         SourceConfig cfg = SourceConfig::fromJson(src);
-        if (!cfg.enabled)
-          continue;
+        if (!cfg.enabled) continue;
 
         try {
           workers.emplace_back(std::make_unique<Worker>(
-              cfg // Передаем объект SourceConfig целиком
+              cfg  // Передаем объект SourceConfig целиком
               ));
           stc::MetricsCollector::instance().incrementCounter("workers_created");
         } catch (const std::exception &e) {
@@ -102,8 +102,7 @@ void Master::spawnWorkers() {
   workers_.access([&](auto &workers) {
     for (const auto &src : config["sources"]) {
       SourceConfig cfg = SourceConfig::fromJson(src);
-      if (!cfg.enabled)
-        continue;
+      if (!cfg.enabled) continue;
 
       try {
         workers.push_back(std::make_unique<Worker>(cfg));

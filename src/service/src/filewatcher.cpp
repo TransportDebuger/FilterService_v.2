@@ -1,7 +1,9 @@
 #include "../include/filewatcher.hpp"
-#include "stc/compositelogger.hpp"
+
 #include <filesystem>
 #include <iostream>
+
+#include "stc/compositelogger.hpp"
 
 namespace fs = std::filesystem;
 
@@ -15,8 +17,7 @@ FileWatcher::FileWatcher(const std::string &path, Callback callback)
 FileWatcher::~FileWatcher() { stop(); }
 
 void FileWatcher::start() {
-  if (running_)
-    return;
+  if (running_) return;
   running_ = true;
 
 #ifdef _WIN32
@@ -32,9 +33,9 @@ void FileWatcher::start() {
   if (inotifyFd_ < 0) {
     throw std::runtime_error("Failed to initialize inotify");
   }
-  watchDescriptor_ = inotify_add_watch(inotifyFd_, path_.c_str(),
-                                       IN_CREATE | IN_DELETE | IN_MODIFY |
-                                           IN_MOVED_FROM | IN_MOVED_TO);
+  watchDescriptor_ = inotify_add_watch(
+      inotifyFd_, path_.c_str(),
+      IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO);
   if (watchDescriptor_ < 0) {
     close(inotifyFd_);
     throw std::runtime_error("Failed to add watch");
@@ -71,10 +72,10 @@ void FileWatcher::run() {
   OVERLAPPED overlapped{};
 
   while (running_) {
-    if (!ReadDirectoryChangesW(dirHandle_, buffer, sizeof(buffer), TRUE,
-                               FILE_NOTIFY_CHANGE_FILE_NAME |
-                                   FILE_NOTIFY_CHANGE_LAST_WRITE,
-                               &bytesReturned, &overlapped, NULL)) {
+    if (!ReadDirectoryChangesW(
+            dirHandle_, buffer, sizeof(buffer), TRUE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE,
+            &bytesReturned, &overlapped, NULL)) {
       // Проверяем доступность пути при ошибке
       if (!fs::exists(path_)) {
         stc::CompositeLogger::instance().error(
@@ -89,8 +90,7 @@ void FileWatcher::run() {
           std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
-        if (!running_)
-          break;
+        if (!running_) break;
 
         // Повторная инициализация
         dirHandle_ = CreateFileA(
@@ -123,19 +123,19 @@ void FileWatcher::run() {
       std::string fullPath = (fs::path(path_) / name).string();
 
       switch (info->Action) {
-      case FILE_ACTION_ADDED:
-        callback_(Event::Created, fullPath);
-        break;
-      case FILE_ACTION_REMOVED:
-        callback_(Event::Deleted, fullPath);
-        break;
-      case FILE_ACTION_MODIFIED:
-        callback_(Event::Modified, fullPath);
-        break;
-      case FILE_ACTION_RENAMED_OLD_NAME:
-      case FILE_ACTION_RENAMED_NEW_NAME:
-        callback_(Event::Renamed, fullPath);
-        break;
+        case FILE_ACTION_ADDED:
+          callback_(Event::Created, fullPath);
+          break;
+        case FILE_ACTION_REMOVED:
+          callback_(Event::Deleted, fullPath);
+          break;
+        case FILE_ACTION_MODIFIED:
+          callback_(Event::Modified, fullPath);
+          break;
+        case FILE_ACTION_RENAMED_OLD_NAME:
+        case FILE_ACTION_RENAMED_NEW_NAME:
+          callback_(Event::Renamed, fullPath);
+          break;
       }
 
       info = info->NextEntryOffset == 0
@@ -169,8 +169,7 @@ void FileWatcher::run() {
           std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
-        if (!running_)
-          break;
+        if (!running_) break;
 
         // Повторная инициализация
         inotifyFd_ = inotify_init1(IN_NONBLOCK);
@@ -180,9 +179,9 @@ void FileWatcher::run() {
           continue;
         }
 
-        watchDescriptor_ = inotify_add_watch(inotifyFd_, path_.c_str(),
-                                             IN_CREATE | IN_DELETE | IN_MODIFY |
-                                                 IN_MOVED_FROM | IN_MOVED_TO);
+        watchDescriptor_ = inotify_add_watch(
+            inotifyFd_, path_.c_str(),
+            IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO);
 
         if (watchDescriptor_ < 0) {
           stc::CompositeLogger::instance().error(

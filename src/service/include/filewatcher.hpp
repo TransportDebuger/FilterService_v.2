@@ -12,7 +12,7 @@
 #endif
 
 class FileWatcher {
-public:
+ public:
   enum class Event { Created, Deleted, Modified, Renamed };
   using Callback = std::function<void(Event, const std::string &)>;
 
@@ -22,7 +22,7 @@ public:
   void start();
   void stop();
 
-private:
+ private:
   void run();
 
   std::string path_;

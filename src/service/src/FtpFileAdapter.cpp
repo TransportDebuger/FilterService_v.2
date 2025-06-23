@@ -4,16 +4,18 @@
  */
 
 #include "../include/FtpFileAdapter.hpp"
-#include "stc/compositelogger.hpp"
+
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <fstream>
 #include <regex>
 #include <sstream>
-#include <sys/stat.h>
+
+#include "stc/compositelogger.hpp"
 
 FtpFileAdapter::FtpFileAdapter(const SourceConfig &config)
     : config_(config), port_(21), pollingInterval_(config.check_interval) {
-
   validatePath(config_.path);
   validateFtpConfig();
 
@@ -33,12 +35,10 @@ FtpFileAdapter::FtpFileAdapter(const SourceConfig &config)
 
   // Извлечение параметров подключения[18][28]
   auto it = config_.params.find("username");
-  if (it != config_.params.end())
-    username_ = it->second;
+  if (it != config_.params.end()) username_ = it->second;
 
   it = config_.params.find("password");
-  if (it != config_.params.end())
-    password_ = it->second;
+  if (it != config_.params.end()) password_ = it->second;
 
   stc::CompositeLogger::instance().info("FtpFileAdapter created for: " +
                                         ftpUrl_);
@@ -149,7 +149,7 @@ void FtpFileAdapter::downloadFile(const std::string &remotePath,
     fclose(file);
 
     if (res != CURLE_OK) {
-      fs::remove(localPath); // Удаляем неполный файл
+      fs::remove(localPath);  // Удаляем неполный файл
       curl_easy_cleanup(curl);
       throw std::ios_base::failure("FTP download failed: " +
                                    std::string(curl_easy_strerror(res)));
@@ -262,8 +262,7 @@ void FtpFileAdapter::connect() {
 void FtpFileAdapter::disconnect() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!connected_)
-    return;
+  if (!connected_) return;
 
   stopMonitoring();
   connected_ = false;
@@ -305,8 +304,7 @@ void FtpFileAdapter::startMonitoring() {
 void FtpFileAdapter::stopMonitoring() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (!monitoring_)
-    return;
+  if (!monitoring_) return;
 
   monitoring_ = false;
 
@@ -342,8 +340,7 @@ size_t FtpFileAdapter::readCallback(void *ptr, size_t size, size_t nmemb,
 
 bool FtpFileAdapter::checkServerAvailability() const {
   CURL *curl = curl_easy_init();
-  if (!curl)
-    return false;
+  if (!curl) return false;
 
   bool available = false;
   try {
@@ -389,8 +386,8 @@ void FtpFileAdapter::monitoringLoop() {
   }
 }
 
-std::vector<std::string>
-FtpFileAdapter::parseFileList(const std::string &listOutput) const {
+std::vector<std::string> FtpFileAdapter::parseFileList(
+    const std::string &listOutput) const {
   std::vector<std::string> files;
   std::istringstream stream(listOutput);
   std::string line;

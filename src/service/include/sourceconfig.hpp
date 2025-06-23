@@ -104,11 +104,11 @@ struct SourceConfig {
    * @details Определяет один критерий для фильтрации XML-файлов
    */
   struct XmlFilterCriterion {
-    std::string xpath;      // XPath для поиска узлов
-    std::string attribute;  // Имя атрибута (опционально)
-    std::string csv_column; // Столбец CSV для сравнения
-    bool required = true;   // Обязательность критерия
-    double weight = 1.0;    // Вес критерия (для WEIGHTED)
+    std::string xpath;       // XPath для поиска узлов
+    std::string attribute;   // Имя атрибута (опционально)
+    std::string csv_column;  // Столбец CSV для сравнения
+    bool required = true;    // Обязательность критерия
+    double weight = 1.0;     // Вес критерия (для WEIGHTED)
   };
 
   /**
@@ -116,13 +116,13 @@ struct SourceConfig {
    * @details Определяет параметры фильтрации XML-файлов
    */
   struct XmlFilterConfig {
-    std::vector<XmlFilterCriterion> criteria; // Критерии фильтрации
-    std::string logic_operator = "AND";       // AND, OR, MAJORITY, WEIGHTED
+    std::vector<XmlFilterCriterion> criteria;  // Критерии фильтрации
+    std::string logic_operator = "AND";  // AND, OR, MAJORITY, WEIGHTED
     std::string comparison_list;
-    double threshold = 0.5; // Порог для MAJORITY и WEIGHTED (0.0-1.0)
+    double threshold = 0.5;  // Порог для MAJORITY и WEIGHTED (0.0-1.0)
     std::vector<XmlNamespace> namespaces;
     bool auto_register_namespaces =
-        true; // Автоматическая регистрация из документа
+        true;  // Автоматическая регистрация из документа
   } xml_filter;
 
   // ============= Методы =============
@@ -168,7 +168,7 @@ struct SourceConfig {
    */
   bool hasRequiredParams(const std::vector<std::string> &required_params) const;
 
-private:
+ private:
   /**
    * @brief Применяет шаблон к имени файла
    * @param filename Исходное имя файла

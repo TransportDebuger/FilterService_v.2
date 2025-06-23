@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -8,16 +9,17 @@ struct ParsedArgs {
   std::string config_path = "config.json";
   std::unordered_map<std::string, std::string> overrides;
   std::vector<std::string> logger_types;
-  std::string log_level = "info";
+  std::optional<std::string> log_level;
   bool daemon_mode = false;
   std::string environment = "production";
+  bool use_cli_logging = false;
 };
 
 class ArgumentParser {
-public:
+ public:
   ParsedArgs parse(int argc, char **argv);
 
-private:
+ private:
   static const std::vector<std::string> validLogLevels;
   static const std::vector<std::string> validLogTypes;
 

@@ -1,7 +1,10 @@
 #include "../include/XMLProcessor.hpp"
-#include "stc/compositelogger.hpp"
-#include <filesystem>
+
 #include <libxml/xpath.h>
+
+#include <filesystem>
+
+#include "stc/compositelogger.hpp"
 
 namespace fs = std::filesystem;
 
@@ -15,9 +18,8 @@ xmlDocPtr XMLProcessor::parseXML(const std::string &path) {
   return doc;
 }
 
-std::string
-XMLProcessor::extractValue(xmlNodePtr node,
-                           const SourceConfig::XmlFilterCriterion &crit) {
+std::string XMLProcessor::extractValue(
+    xmlNodePtr node, const SourceConfig::XmlFilterCriterion &crit) {
   if (!crit.attribute.empty()) {
     xmlChar *prop = xmlGetProp(node, BAD_CAST crit.attribute.c_str());
     if (prop) {
@@ -32,7 +34,6 @@ XMLProcessor::extractValue(xmlNodePtr node,
   return val;
 }
 
-// НОВЫЙ МЕТОД: Универсальная регистрация пространств имён
 void XMLProcessor::registerNamespaces(xmlXPathContextPtr ctx, xmlDocPtr doc) {
   if (!config_.xml_filter.namespaces.empty()) {
     // Используем настроенные пространства имён
@@ -60,8 +61,7 @@ void XMLProcessor::registerConfiguredNamespaces(xmlXPathContextPtr ctx) {
 void XMLProcessor::registerNamespacesFromDocument(xmlXPathContextPtr ctx,
                                                   xmlDocPtr doc) {
   xmlNodePtr root = xmlDocGetRootElement(doc);
-  if (!root)
-    return;
+  if (!root) return;
 
   // Извлекаем все объявления пространств имён из корневого элемента
   xmlNsPtr ns = root->nsDef;
@@ -85,8 +85,7 @@ void XMLProcessor::registerNamespacesFromDocument(xmlXPathContextPtr ctx,
 std::string XMLProcessor::getDocumentNamespaces(xmlDocPtr doc) {
   std::string result;
   xmlNodePtr root = xmlDocGetRootElement(doc);
-  if (!root)
-    return result;
+  if (!root) return result;
 
   xmlNsPtr ns = root->nsDef;
   while (ns) {
@@ -157,7 +156,7 @@ bool XMLProcessor::evaluateEntryAgainstCriteria(xmlNodePtr entry,
 
     // Создаём контекст XPath для данного элемента
     xmlXPathContextPtr entryCtx = xmlXPathNewContext(doc);
-    entryCtx->node = entry; // Устанавливаем контекст на конкретный элемент
+    entryCtx->node = entry;  // Устанавливаем контекст на конкретный элемент
 
     // Регистрируем пространства имён
     registerNamespaces(entryCtx, doc);
@@ -187,8 +186,7 @@ bool XMLProcessor::evaluateEntryAgainstCriteria(xmlNodePtr entry,
       }
     }
 
-    if (result)
-      xmlXPathFreeObject(result);
+    if (result) xmlXPathFreeObject(result);
     xmlXPathFreeContext(entryCtx);
 
     criteriaResults.push_back(criterionMatched);
@@ -217,8 +215,7 @@ bool XMLProcessor::applyLogic(const std::vector<bool> &results) {
     for (size_t i = 0; i < results.size(); ++i) {
       double w = config_.xml_filter.criteria[i].weight;
       total += w;
-      if (results[i])
-        score += w;
+      if (results[i]) score += w;
     }
     return score / total >= config_.xml_filter.threshold;
   }
@@ -231,8 +228,8 @@ void XMLProcessor::createOutputDocuments(xmlDocPtr srcDoc, xmlDocPtr &procDoc,
   exclDoc = xmlNewDoc(BAD_CAST "1.0");
 
   xmlNodePtr srcRoot = xmlDocGetRootElement(srcDoc);
-  xmlNodePtr procRoot = xmlCopyNode(srcRoot, 0); // Копируем без детей
-  xmlNodePtr exclRoot = xmlCopyNode(srcRoot, 0); // Копируем без детей
+  xmlNodePtr procRoot = xmlCopyNode(srcRoot, 0);  // Копируем без детей
+  xmlNodePtr exclRoot = xmlCopyNode(srcRoot, 0);  // Копируем без детей
 
   xmlDocSetRootElement(procDoc, procRoot);
   xmlDocSetRootElement(exclDoc, exclRoot);
@@ -338,8 +335,7 @@ bool XMLProcessor::process(const std::string &xmlPath) {
         }
       }
 
-      if (result)
-        xmlXPathFreeObject(result);
+      if (result) xmlXPathFreeObject(result);
     }
 
     xmlXPathFreeContext(ctx);

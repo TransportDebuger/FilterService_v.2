@@ -1,14 +1,15 @@
 #pragma once
-#include "../include/AdapterFactory.hpp"
-#include "../include/workercontainer.hpp"
-#include "stc/MetricsCollector.hpp"
-#include "stc/SignalRouter.hpp"
 #include <atomic>
 #include <functional>
 #include <memory>
 
+#include "../include/AdapterFactory.hpp"
+#include "../include/workercontainer.hpp"
+#include "stc/MetricsCollector.hpp"
+#include "stc/SignalRouter.hpp"
+
 class Master {
-public:
+ public:
   enum class State { STOPPED, STARTING, RUNNING, RELOADING, FATAL };
 
   explicit Master(std::function<nlohmann::json()> configProvider);
@@ -21,7 +22,7 @@ public:
   State getState() const noexcept;
   size_t getWorkerCount() const;
 
-private:
+ private:
   void spawnWorkers();
   void terminateWorkers();
   void validateConfig(const nlohmann::json &config) const;

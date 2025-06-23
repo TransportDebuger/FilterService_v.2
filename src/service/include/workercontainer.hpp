@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../include/worker.hpp"
 #include <memory>
 #include <mutex>
 #include <vector>
+
+#include "../include/worker.hpp"
 
 /**
  * @class WorkersContainer
@@ -13,7 +14,7 @@
  * потоков с использованием std::mutex для синхронизации
  */
 class WorkersContainer {
-public:
+ public:
   /**
    * @brief Выполняет операцию с внутренним вектором Worker'ов
    * @tparam Func Тип функтора (auto-deduced)
@@ -24,7 +25,8 @@ public:
    *     workers.push_back(std::make_unique<Worker>(config));
    * });
    */
-  template <typename Func> void access(Func &&func) {
+  template <typename Func>
+  void access(Func &&func) {
     std::lock_guard lock(mutex_);
     func(workers_);
   };
@@ -51,7 +53,7 @@ public:
     swap(workers_, other.workers_);
   };
 
-private:
+ private:
   mutable std::mutex mutex_;
   std::vector<std::unique_ptr<Worker>> workers_;
 };
