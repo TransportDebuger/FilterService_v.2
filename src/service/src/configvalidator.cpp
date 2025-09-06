@@ -1,3 +1,12 @@
+/**
+ * @file configcache.cpp
+ * @author Artem Ulyanov
+ * @company STC Ltd.
+ * @date May 2025
+ * @brief Реализация валидатора структуры JSON-конфигурации
+ *
+ * @version 1.0
+ */
 #include "../include/configvalidator.hpp"
 
 #include <vector>

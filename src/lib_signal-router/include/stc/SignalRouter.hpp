@@ -99,14 +99,14 @@ class SignalRouter {
    */
   void stop() noexcept;
 
+ private:
+  SignalRouter();  ///< Приватный конструктор (Singleton)
+  
   /**
-   * @brief Деструктор
+   * @brief Приватный Деструктор
    * @note Автоматически вызывает stop() и восстанавливает исходные обработчики
    */
   ~SignalRouter();
-
- private:
-  SignalRouter();  ///< Приватный конструктор (Singleton)
   void processSignals();  ///< Основной цикл обработки
 
   std::unordered_map<int, std::vector<Handler>>
@@ -116,7 +116,7 @@ class SignalRouter {
   std::thread worker_thread_;         ///< Поток обработки
   int signal_fd_ = -1;                ///< Дескриптор signalfd
   sigset_t original_mask_;   ///< Исходная маска сигналов
-  sigset_t blocked_mask_{};  ///<
+  sigset_t blocked_mask_{};  ///< Маска блокировки сигналов (пустая по умолчанию)
 };
 
 }  // namespace stc

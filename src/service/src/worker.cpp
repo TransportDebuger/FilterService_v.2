@@ -10,12 +10,14 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <signal.h>
 
 #include "../include/XMLProcessor.hpp"
+#include "../include/signal_mask_guard.hpp"
 
 std::atomic<int> Worker::instanceCounter_{0};
 
-Worker::Worker(const SourceConfig &config) : config_(config), pid_(::getpid()) {
+Worker::Worker(const SourceConfig &config) : config_(config) {
   int id = instanceCounter_.fetch_add(1, std::memory_order_relaxed);
   workerTag_ = config_.name + "#" + std::to_string(id);
 
@@ -48,12 +50,13 @@ Worker::Worker(const SourceConfig &config) : config_(config), pid_(::getpid()) {
 }
 
 Worker::~Worker() {
-  try {
-    stopGracefully();
-    stc::CompositeLogger::instance().debug("Worker destroyed, " + workerTag_);
-  } catch (...) {
-    // Подавляем исключения в деструкторе
-  }
+    try {
+        stc::CompositeLogger::instance().debug("Worker destructor called for " + workerTag_);
+        stopGracefully();
+        stc::CompositeLogger::instance().debug("Worker destroyed, " + workerTag_);
+    } catch (...) {
+        // Подавляем исключения в деструкторе
+    }
 }
 
 void Worker::start() {
@@ -66,6 +69,8 @@ void Worker::start() {
   }
 
   try {
+    SignalMaskGuard guard({SIGINT, SIGTERM});
+    
     // Валидация путей
     validatePaths();
 
@@ -99,26 +104,25 @@ void Worker::start() {
 }
 
 void Worker::stop() {
-  std::lock_guard<std::mutex> lock(state_mutex_);
-
-  if (!running_) return;
-
-  running_ = false;
-  paused_ = false;
-  cv_.notify_all();
-
-  // Останавливаем мониторинг
-  if (adapter_) {
-    adapter_->stopMonitoring();
-    adapter_->disconnect();
-  }
-
-  // Ожидаем завершения потока
-  if (worker_thread_.joinable()) {
-    worker_thread_.join();
-  }
-
-  stc::CompositeLogger::instance().info("Worker stopped, " + workerTag_);
+  std::lock_guard lock(state_mutex_);
+    if (!running_) return;
+    
+    running_ = false;
+    paused_ = false;
+    cv_.notify_all();
+    
+    // Останавливаем мониторинг
+    if (adapter_) {
+        adapter_->stopMonitoring();
+        adapter_->disconnect();
+    }
+    
+    // Ожидаем завершения потока
+    if (worker_thread_.joinable()) {
+        worker_thread_.join();
+    }
+    
+    stc::CompositeLogger::instance().info("Worker stopped, " + workerTag_);
 }
 
 void Worker::pause() {
@@ -150,6 +154,7 @@ void Worker::restart() {
 }
 
 void Worker::stopGracefully() {
+  stc::CompositeLogger::instance().debug("Worker::stopGracefully() ENTER " + workerTag_);
   if (!running_) return;
 
   // Ожидаем завершения текущей обработки
@@ -158,13 +163,10 @@ void Worker::stopGracefully() {
   }
 
   stop();
+  stc::CompositeLogger::instance().debug("Worker::stopGracefully() EXIT " + workerTag_);
 }
 
 bool Worker::isAlive() const noexcept {
-  return running_.load(std::memory_order_relaxed);
-}
-
-bool Worker::isRunning() const noexcept {
   return running_.load(std::memory_order_relaxed);
 }
 
@@ -421,4 +423,30 @@ void Worker::handleFileError(const std::string &filePath,
         "Failed to handle file error: " + std::string(e.what()) + ", " +
         workerTag_);
   }
+}
+
+void Worker::restartMonitoring() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    if (!adapter_) {
+        stc::CompositeLogger::instance().warning("Worker " + config_.name + " has no adapter to restart, " + workerTag_);
+        return;
+    }
+
+    try {
+        // Останавливаем текущий мониторинг
+        if (running_) {
+            adapter_->stopMonitoring();
+            stc::CompositeLogger::instance().debug("Worker " + config_.name + " monitoring stopped, " + workerTag_);
+            
+            // Перезапускаем мониторинг
+            adapter_->startMonitoring();
+            stc::CompositeLogger::instance().info("Worker " + config_.name + " monitoring restarted, " + workerTag_);
+        } else {
+            stc::CompositeLogger::instance().warning("Worker " + config_.name + " is not running, cannot restart monitoring, " + workerTag_);
+        }
+    } catch (const std::exception &e) {
+        stc::CompositeLogger::instance().error("Failed to restart monitoring for worker " + config_.name + ": " + std::string(e.what()) + ", " + workerTag_);
+        throw;
+    }
 }

@@ -88,27 +88,6 @@ class FilterListManager {
   bool contains(const std::string &column, const std::string &value) const;
 
   /**
-   * @brief Получает список всех доступных столбцов
-   * @return std::vector<std::string> Вектор имен столбцов
-   *
-   * @details Возвращает имена всех столбцов, загруженных из CSV-файла.
-   * Полезно для валидации конфигурации XMLProcessor.
-   *
-   * @note Потокобезопасен, копирует данные под shared_lock
-   */
-  std::vector<std::string> getAvailableColumns() const;
-
-  /**
-   * @brief Получает количество значений в указанном столбце
-   * @param column Имя столбца
-   * @return size_t Количество уникальных значений в столбце
-   * @throw std::invalid_argument При отсутствии указанного столбца
-   *
-   * @note Используется для метрик и отладки
-   */
-  size_t getColumnSize(const std::string &column) const;
-
-  /**
    * @brief Проверяет инициализацию менеджера
    * @return bool true если менеджер инициализирован
    *

@@ -121,23 +121,23 @@ xmlNodePtr XMLProcessor::findParentEntry(xmlNodePtr node) {
 
 std::string XMLProcessor::makeRelativeXPath(const std::string &xpath) {
   // Если XPath уже относительный, возвращаем как есть
-  if (xpath.find("//") != 0 && xpath.find("/") != 0) {
+  if (!xpath.starts_with("//") && !xpath.starts_with("/")) {
     return xpath;
   }
 
   std::string relative = xpath;
 
   // Удаляем начальные слэши
-  if (relative.find("//") == 0) {
+  if (relative.starts_with("//")) {
     relative = relative.substr(2);
-  } else if (relative.find("/") == 0) {
+  } else if (relative.starts_with("/")) {
     relative = relative.substr(1);
   }
 
   // Если XPath начинается с известных корневых элементов, убираем их
   std::vector<std::string> root_elements = {"entry/", "record/", "item/"};
   for (const auto &root : root_elements) {
-    if (relative.find(root) == 0) {
+    if (relative.starts_with(root)) {
       relative = relative.substr(root.length());
       break;
     }
@@ -207,7 +207,7 @@ bool XMLProcessor::applyLogic(const std::vector<bool> &results) {
                        [](bool v) { return v; });
   }
   if (op == "MAJORITY") {
-    int count = std::count(results.begin(), results.end(), true);
+    size_t count = std::count(results.begin(), results.end(), true);
     return count > results.size() / 2;
   }
   if (op == "WEIGHTED") {

@@ -7,6 +7,8 @@
 #include <codecvt>
 #include <filesystem>
 #include <locale>
+#include <tuple>
+#include <algorithm>
 
 #include "stc/SignalRouter.hpp"
 
@@ -40,11 +42,14 @@ void FilterListManager::initialize(const std::string &csvPath) {
         std::to_string(columnData_.size()) + " columns from: " + csvPath_);
 
     // Логирование статистики по столбцам
-    for (const auto &[column, values] : columnData_) {
-      stc::CompositeLogger::instance().debug(
-          "Column '" + column + "' contains " + std::to_string(values.size()) +
-          " unique values");
-    }
+  for (const auto& pair : columnData_) {
+    const std::string& column = pair.first;
+    const auto& values = pair.second;
+    
+    stc::CompositeLogger::instance().debug(
+        "Column '" + column + "' contains " + 
+        std::to_string(values.size()) + " unique values");
+  }
 
   } catch (const std::exception &e) {
     initialized_.store(false);
@@ -125,30 +130,6 @@ bool FilterListManager::contains(const std::string &column,
   }
 
   return found;
-}
-
-std::vector<std::string> FilterListManager::getAvailableColumns() const {
-  if (!initialized_.load()) {
-    return {};
-  }
-
-  std::shared_lock<std::shared_mutex> lock(mutex_);
-  return headers_;
-}
-
-size_t FilterListManager::getColumnSize(const std::string &column) const {
-  if (!initialized_.load()) {
-    throw std::runtime_error("FilterListManager not initialized");
-  }
-
-  std::shared_lock<std::shared_mutex> lock(mutex_);
-
-  auto it = columnData_.find(column);
-  if (it == columnData_.end()) {
-    throw std::invalid_argument("Column not found: " + column);
-  }
-
-  return it->second.size();
 }
 
 bool FilterListManager::isInitialized() const noexcept {
@@ -309,13 +290,12 @@ void FilterListManager::validateData() const {
   }
 
   // Проверяем, что есть хотя бы один столбец с данными
-  bool hasData = false;
-  for (const auto &[column, values] : columnData_) {
-    if (!values.empty()) {
-      hasData = true;
-      break;
-    }
-  }
+  bool hasData = std::any_of(
+    columnData_.begin(), 
+    columnData_.end(),
+    [](const auto& pair) {
+        return !pair.second.empty();
+    });
 
   if (!hasData) {
     throw std::runtime_error("No valid data found in any column");

@@ -109,6 +109,7 @@ std::vector<std::string> FtpFileAdapter::listFiles(const std::string &path) {
   return files;
 }
 
+// unused function
 void FtpFileAdapter::downloadFile(const std::string &remotePath,
                                   const std::string &localPath) {
   validatePath(remotePath);

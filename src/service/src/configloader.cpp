@@ -1,3 +1,24 @@
+/**
+ * @file configloader.cpp
+ * @author Artem Ulyanov
+ * @company STC Ltd.
+ * @date May 2025
+ * @brief Реализация загрузчика конфигураций из JSON-файлов
+ *
+ * @details
+ * Содержит полную реализацию методов класса ConfigLoader для загрузки
+ * и перезагрузки конфигураций из JSON-файлов. Обеспечивает надежное
+ * чтение файлов с детальной обработкой ошибок и валидацией данных.
+ *
+ * Ключевые особенности реализации:
+ * - Использование RAII для автоматического управления ресурсами
+ * - Детальная обработка исключений с информативными сообщениями
+ * - Оптимизированное чтение файлов через std::ifstream
+ * - Интеграция с nlohmann/json для высокопроизводительного парсинга
+ *
+ * @version 1.0
+ */
+
 #include "../include/configloader.hpp"
 
 #include <fstream>
@@ -14,6 +35,10 @@ nlohmann::json ConfigLoader::reload(const std::string &currentFile) {
   }
   return readFileContents(currentFile);
 }
+
+std::string ConfigLoader::getLastLoadedFile() const { return lastLoadedFile; }
+
+bool ConfigLoader::hasLoadedFile() const { return !lastLoadedFile.empty(); }
 
 nlohmann::json ConfigLoader::readFileContents(
     const std::string &filename) const {

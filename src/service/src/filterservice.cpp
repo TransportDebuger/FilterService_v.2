@@ -2,7 +2,7 @@
  * \file filterservice.cpp
  * \author Artem Ulyanov
  * \version 1
- * \date March, 2024
+ * \date March, 2025
  * \brief Основной файл проекта filter_service.
  * \details Основной файл проекта filter_service. Описывает функцию основной
  * точки входа в программу.

@@ -1,3 +1,22 @@
+/**
+ * @file configcache.cpp
+ * @author FilterService Development Team
+ * @company FilterService Solutions Ltd.
+ * @date June 2025
+ * @brief Реализация кэша конфигураций
+ *
+ * @details
+ * Содержит реализацию методов класса ConfigCache для кэширования
+ * конфигураций различных окружений XML Filter Service. Обеспечивает
+ * потокобезопасный доступ к кэшированным данным и их обновление.
+ *
+ * Ключевые особенности реализации:
+ * - Синхронизация доступа с помощью std::mutex
+ * - Валидация входных данных перед сохранением в кэш
+ * - Оптимизированный доступ к кэшированным конфигурациям
+ *
+ * @version 1.0
+ */
 #include "../include/configcache.hpp"
 
 #include <stdexcept>

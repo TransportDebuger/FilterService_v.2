@@ -19,8 +19,6 @@ SignalRouter::SignalRouter() {
 }
 
 void SignalRouter::registerHandler(int signum, Handler handler) {
-  std::cout << "SignalRouter: registering handler for signal "
-            << std::to_string(signum) << std::endl;
   if (signum <= 0 || signum >= NSIG) {
     throw std::invalid_argument("Invalid signal number");
   }
@@ -46,14 +44,11 @@ void SignalRouter::registerHandler(int signum, Handler handler) {
 }
 
 void SignalRouter::unregisterHandler(int signum) {
-  std::cout << "SignalRouter: unregistering handler for signal "
-            << std::to_string(signum) << std::endl;
   std::lock_guard lock(handlers_mutex_);
   handlers_.erase(signum);
 }
 
 void SignalRouter::start() {
-  std::cout << "SignalRouter: starts" << std::endl;
   if (running_.exchange(true)) return;
 
   worker_thread_ = std::thread([this] {
@@ -102,8 +97,6 @@ void SignalRouter::start() {
 }
 
 void SignalRouter::stop() noexcept {
-  std::cout << "SignalRouter: stop called, unsubscribing all handlers"
-            << std::endl;
   running_ = false;
   if (worker_thread_.joinable()) {
     worker_thread_.join();
@@ -111,7 +104,6 @@ void SignalRouter::stop() noexcept {
 }
 
 SignalRouter::~SignalRouter() {
-  std::cout << "SignalRouter: destructed" << std::endl;
   stop();
   close(signal_fd_);
   sigprocmask(SIG_SETMASK, &original_mask_, nullptr);

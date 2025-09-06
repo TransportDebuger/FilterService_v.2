@@ -1,3 +1,14 @@
+/**
+ * @file configmanager.cpp
+ * @brief Реализация методов ConfigManager
+ *
+ * @details
+ * 1. instance(): потокобезопасный ленивый Singleton
+ * 2. initialize(): полная загрузка и валидация
+ * 3. reload(): безопасная перезагрузка с откатом
+ * 4. getMergedConfig(): кэшированный merge_patch
+ * 5. applyCliOverrides(): merge_patch для CLI-переопределений
+ */
 #include "../include/configmanager.hpp"
 
 #include <iostream>
@@ -90,14 +101,15 @@ std::string ConfigManager::getGlobalComparisonList(
   auto config = getMergedConfig(env);
   return config.value("comparison_list", "./comparison_list.csv");
 }
+
 void ConfigManager::applyCliOverrides(
     const std::unordered_map<std::string, std::string> &overrides) {
   std::lock_guard<std::mutex> lock(configMutex_);
 
   // Применение CLI переопределений
   nlohmann::json overrideJson;
-  for (const auto &[key, value] : overrides) {
-    overrideJson[key] = value;
+  for (const auto &pair : overrides) {
+    overrideJson[pair.first] = pair.second;
   }
   baseConfig_.merge_patch(overrideJson);
 
@@ -111,6 +123,17 @@ void ConfigManager::applyCliOverrides(
     // Обработка конфигов без секции environments
     cache_.updateCache("default", nlohmann::json());
   }
+}
+
+const nlohmann::json& ConfigManager::getCurrentConfig() const {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    return baseConfig_;
+}
+
+void ConfigManager::restoreFromBackup(const nlohmann::json& backup) {
+    std::lock_guard<std::mutex> lock(configMutex_);
+    baseConfig_ = backup;
+    cache_.clearAll(); // Очищаем кэш после восстановления
 }
 
 void ConfigManager::backupCurrentConfig() {

@@ -1,3 +1,24 @@
+/**
+ * @file argumentparser.cpp
+ * @author Artem Ulyanov
+ * @company STC Ltd.
+ * @date May 2025
+ * @brief Реализация парсера аргументов командной строки
+ *
+ * @details
+ * Содержит полную реализацию функциональности парсинга и валидации
+ * аргументов командной строки для XML Filter Service. Реализует
+ * алгоритмы обработки различных форматов параметров и их валидации.
+ *
+ * Ключевые особенности реализации:
+ * - Поддержка POSIX и GNU стилей параметров
+ * - Устойчивость к некорректным входным данным
+ * - Детальные сообщения об ошибках для отладки
+ * - Оптимизированная обработка строк для производительности
+ *
+ * @version 1.0
+ */
+
 #include "../include/argumentparser.hpp"
 
 #include <algorithm>
@@ -5,6 +26,7 @@
 
 using namespace std;
 
+// Инициализация статических членов класса
 const vector<string> ArgumentParser::validLogLevels = {
     "debug", "info", "warning", "error", "critical"};
 
@@ -18,11 +40,11 @@ ParsedArgs ArgumentParser::parse(int argc, char **argv) {
     string arg = argv[i];
 
     if (arg == "--help" || arg == "-h") {
-      printHelp();
-      exit(EXIT_SUCCESS);
+      args.help_message = true;
+    } else if (arg == "--version" || arg == "-v") {
+      args.version_message = true;
     } else if (arg == "--reload" || arg == "-r") {
-      throw runtime_error(
-          "ArgumentParser: Reload should be handled before parsing");
+      args.reload = true;
     } else if (arg == "--daemon") {
       args.daemon_mode = true;
     } else if (arg.compare(0, 10, "--override") == 0) {
@@ -43,7 +65,6 @@ ParsedArgs ArgumentParser::parse(int argc, char **argv) {
       }
     } else {
       throw invalid_argument("ArgumentParser: Unknown argument: " + arg);
-      printHelp();
     }
   }
 
@@ -120,14 +141,12 @@ void ArgumentParser::parseLogLevel(const string &arg, ParsedArgs &args, int &i,
     value = argv[++i];
   } else {
     throw invalid_argument("ArgumentParser: --log-level requires a value");
-    printHelp();
   }
 
   if (find(validLogLevels.begin(), validLogLevels.end(), args.log_level) ==
       validLogLevels.end()) {
     throw invalid_argument("ArgumentParser: Invalid log level: " +
                            args.log_level.value());
-    printHelp();
   }
 
   args.log_level = value;
@@ -140,18 +159,4 @@ void ArgumentParser::validateLogTypes(const vector<string> &types) {
       throw invalid_argument("ArgumentParser: Invalid logger type: " + type);
     }
   }
-}
-
-void ArgumentParser::printHelp() const {
-  cout << "XML Filter Service\n\n"
-       << "Usage:\n"
-       << " service [options]\n\n"
-       << "Options:\n"
-       << " --help, -h          Show this help message\n"
-       << " --config-file=FILE  Configuration file path\n"
-       << " --override=KEY:VAL  Override config parameter\n"
-       << " --log-type=TYPES    Logger types (comma-separated)\n"
-       << " --log-level=LEVEL   Logging level "
-          "[debug|info|warning|error|critical]\n"
-       << " --daemon            Run as daemon\n";
 }
