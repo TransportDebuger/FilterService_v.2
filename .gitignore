@@ -73,6 +73,7 @@ test_results/
 # Documentation generated files
 docs/html/
 docs/latex/
+doc/
 
 # OS specific
 .DS_Store

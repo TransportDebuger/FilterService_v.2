@@ -20,7 +20,8 @@
           "type": "async_file",
           "level": "debug",
           "file": "./prod_app.log",
-          "rotated": true
+          "rotated": true,
+          "max_file_size": 10485760
         },
         {
           "type": "console",
