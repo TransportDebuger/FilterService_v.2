@@ -8,6 +8,10 @@
 #include <filesystem>
 #include <regex>
 #include <stdexcept>
+#include "stc/compositelogger.hpp"
+#include "stc/consolelogger.hpp"
+#include "stc/asyncfilelogger.hpp"
+#include "stc/syncfilelogger.hpp"
 
 namespace fs = std::filesystem;
 
@@ -127,6 +131,30 @@ SourceConfig SourceConfig::fromJson(const nlohmann::json &src) {
       criterion.attribute = xf.value("attribute", "");
       criterion.csv_column = xf.value("csv_column", "");
       config.xml_filter.criteria.push_back(criterion);
+    }
+    //парсинг параметров контроля количества записей
+    if (xf.contains("record_count") && xf["record_count"].is_object()) {
+        const auto& rcObj = xf["record_count"];
+        
+        if (rcObj.contains("xpath") && rcObj["xpath"].is_string() &&
+            rcObj.contains("attribute") && rcObj["attribute"].is_string()) {
+            
+            config.xml_filter.record_count_config.xpath = rcObj["xpath"].get<std::string>();
+            config.xml_filter.record_count_config.attribute = rcObj["attribute"].get<std::string>();
+            config.xml_filter.record_count_config.enabled = true;
+            
+            stc::CompositeLogger::instance().debug(
+                "Record count config for source '" + config.name + "': " +
+                "xpath='" + config.xml_filter.record_count_config.xpath + "', " +
+                "attribute='" + config.xml_filter.record_count_config.attribute + "'");
+        } else {
+            stc::CompositeLogger::instance().warning(
+                "Invalid record_count configuration for source '" + config.name + 
+                "': missing 'xpath' or 'attribute' fields");
+        }
+    } else {
+        stc::CompositeLogger::instance().debug(
+            "Record count control is not configured for source '" + config.name + "'");
     }
   }
 

@@ -39,6 +39,20 @@
 #include <vector>
 
 /**
+ * @brief Конфигурация контроля количества записей в документе
+ */
+struct RecordCountConfig {
+    std::string xpath;        ///< XPath к элементу, например "//Export" или "/docroot/recordCount"
+    std::string attribute;    ///< Имя атрибута или свойства, например "recordCount" или "value"
+    bool enabled;             ///< Включена ли обработка контроля записей
+    
+    RecordCountConfig() : enabled(false) {}
+    
+    RecordCountConfig(const std::string& xp, const std::string& attr, bool en = true)
+        : xpath(xp), attribute(attr), enabled(en) {}
+};
+
+/**
  * @struct SourceConfig
  * @brief Хранит всю конфигурацию одного источника данных
  *
@@ -401,6 +415,11 @@ struct SourceConfig {
      * @note Ручная регистрация через namespaces имеет приоритет
      */
     bool auto_register_namespaces = true;
+
+      /**
+       * @brief Параметры контроля количества записей в файле
+       */
+    RecordCountConfig record_count_config;
   } xml_filter;
 
   /**

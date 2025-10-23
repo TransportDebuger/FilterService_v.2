@@ -1,0 +1,46 @@
+{
+  "sources": [
+    {
+      "name": "local_xml_processor",
+      "type": "local",
+      "path": "/var/data/input",
+      "file_mask": "*.xml",
+      "processed_dir": "/var/data/processed",
+      "bad_dir": "/var/data/errors",
+      "filtered_template": "{filename}_filtered.{ext}",
+      "filtering_enabled": true,
+      "check_interval": 10,
+      "enabled": true
+    },
+    {
+      "name": "smb_shared_docs",
+      "type": "smb",
+      "path": "smb://fileserver.company.com/shared/documents",
+      "file_mask": "*.pdf",
+      "processed_dir": "/var/data/smb_processed",
+      "check_interval": 30,
+      "params": {
+        "username": "service_user",
+        "password": "secure_password",
+        "domain": "COMPANY",
+        "timeout": "30"
+      }
+    },
+    {
+      "name": "ftp_external_data",
+      "type": "ftp",
+      "path": "ftp://ftp.external-partner.com:2121/incoming/",
+      "file_mask": "data_*.csv",
+      "processed_dir": "/var/data/ftp_processed",
+      "excluded_dir": "/var/data/ftp_excluded",
+      "check_interval": 60,
+      "filtering_enabled": false,
+      "params": {
+        "username": "integration_user",
+        "password": "ftp_secret",
+        "port": "2121",
+        "timeout": "60"
+      }
+    }
+  ]
+}

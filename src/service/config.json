@@ -174,13 +174,17 @@
           "check_interval": 10,
           "enabled": true,
           "xml_filter": {
+            "record_count": {
+              "xpath": "//Export",
+              "attribute": "recordCount"
+            },
             "auto_register_namespaces": true,
             "logic_operator": "WEIGHTED",
-            "threshold": 0.6,
+            "threshold": 0.7,
             "comparison_list": "./comparison_list.csv",
             "criteria": [
               {
-                "xpath": "//pnr/pdp/docNumber",
+                "xpath": "//pdp/docNumber",
                 "attribute": "value",
                 "csv_column": "ndoc",
                 "required": true,

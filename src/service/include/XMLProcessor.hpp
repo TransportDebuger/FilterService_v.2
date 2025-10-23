@@ -53,15 +53,22 @@ class XMLProcessor {
      * @param[in] config Конфигурация источника (in)
      *
      * @details
-     * Сохраняет ссылку на объект SourceConfig, содержащий критерии и пути.
+     * Подготавливает объект к последующей обработке XML-данных, обеспечивая доступ 
+     * к конфигурационным параметрам через config_. Позволяет гибко настраивать 
+     * поведение объекта в зависимости от переданных настроек.
+     * Это основной способ инициализации объекта перед началом работы с XML-данными. 
+     * Принимает параметр config типа const SourceConfig&. Использование ссылки (&) 
+     * позволяет избежать лишних копирований объекта SourceConfig, а ключевое слово 
+     * const гарантирует, что конфигурация не будет изменена внутри конструктора.
      *
-     * @warning Конфигурация должна быть валидирована заранее
-     (SourceConfig::validate).
+     * @warning Конфигурация должна быть валидирована заранее методом SourceConfig::validate().
+     * @note Конструктор запрещает неявное преобразование типов.
      *
      * @code
-     SourceConfig cfg = ...;
-     XMLProcessor proc(cfg);
-     * @endcode
+       SourceConfig cfg = ...;
+       XMLProcessor processor(cfg); // Создание объекта с определенной конфигурацией
+       XMLProcessor processor = cfg; // Ошибка компиляции: неявное преобразование типов запрещено.
+       @endcode
      */
   explicit XMLProcessor(const SourceConfig &config);
 
@@ -96,16 +103,45 @@ class XMLProcessor {
   const SourceConfig &config_;
 
   /**
+     * @brief Структура для хранения информации об объекте для фильтрации
+     */
+  struct ObjectBoundary {
+    xmlNodePtr objectNode;      // Узел объекта для фильтрации
+    xmlNodePtr containerNode;   // Родительский контейнер объекта
+    int depth;                  // Глубина вложенности от корня
+    std::string objectPath;     // Путь к объекту для отладки
+        
+    ObjectBoundary() : objectNode(nullptr), containerNode(nullptr), depth(0) {}
+    ObjectBoundary(xmlNodePtr obj, xmlNodePtr container, int d, const std::string& path)
+            : objectNode(obj), containerNode(container), depth(d), objectPath(path) {}
+  };
+
+  /**
+     * @brief Структура для хранения результатов анализа узла
+     */
+    struct NodeAnalysisResult {
+        xmlNodePtr node;
+        std::vector<bool> criteriaResults;
+        bool shouldRemove;
+        
+        NodeAnalysisResult() : node(nullptr), shouldRemove(false) {}
+    };
+
+  /**
      * @brief Парсит XML-файл в структуру libxml2
      * @param[in] path Путь к XML-файлу (in)
-     * @return xmlDocPtr Указатель на разобранный xmlDocPtr (out)
+     * @return xmlDocPtr Указатель на разобранный xmlDocPtr
      * @throw std::runtime_error Если парсинг не удался
      *
      * @details
-     * Вызывает xmlReadFile с флагом XML_PARSE_NOBLANKS
-     * и проверяет результат на null.
+     * Функция обеспечивает надежное чтение и проверку XML-файла, используя внешнюю библиотеку 
+     * (libxml2) и интеграцию с системой логирования (stc::CompositeLogger). При работе метода 
+     * из результата разбора удаляются не информативные пробелы XML_PARSE_NOBLANKS.
+     * Функция гарантирует, что документ корректно загружен (возвращает указатель на документ), 
+     * либо логгирует ошибку в файл и завершает выполнение программы (std::runtime_error).
      *
-     * @note Не забывайте вызывать xmlFreeDoc() после использования.
+     * @warning Во избежание утечки ресурсов после использования указателя необходимо освободить 
+     * его используя xmlFreeDoc().
      *
      * @code
      xmlDocPtr doc = parseXML("data/input.xml");
@@ -205,13 +241,25 @@ class XMLProcessor {
   void registerNamespacesFromDocument(xmlXPathContextPtr ctx, xmlDocPtr doc);
 
   /**
-     * @brief Получает текстовое представление зарегистрированных ns из
-     документа
-     * @param[in] doc xmlDocPtr (in)
-     * @return std::string Строка вида "prefix:URI\n" (out)
+     * @brief Получает текстовое представление зарегистрированных пространств имен из
+     XML документа.
+     * @param[in] doc Указатель на разобранный документ xmlDocPtr
+     * @return 
+     *   - При успешном выполненнии возвращаетмя строка (std::string) вида "prefix:URI\n" или при отстутсвии префикса "default:URI\n";
+     *   - При отсутствии корневого элемента возвращается пустая строка;
      *
      * @details
-     * Проходит по nsDef корня, формирует строку для логирования.
+     * Предоставляет удобный способ получения информации о всех пространствах имён, определённых в корне документа.
+     * Функция пепербирает все объявления пространств имён (nsDef) корневого элемента. 
+     * Для каждого пространства:
+     *   - Если задан префикс (ns->prefix), формирует строку вида префикс:URI.
+     *   - Если префикс отсутствует (дефолтное пространство), добавляет default:URI.
+     * Результат представляется пользователю в виде форматированой строки, т.е. склеивается в одну строку с переносами (\n).
+     * Пример выовда:
+     * ```  
+     * entry:http://example.com/entries  
+     * default:http://example.com/default  
+     * ```
      *
      * @code
      auto nsList = getDocumentNamespaces(doc);
@@ -276,15 +324,17 @@ class XMLProcessor {
   std::string makeRelativeXPath(const std::string &xpath);
 
   /**
-     * @brief Создаёт пустые выходные XML-документы для processed и excluded
-     * @param[in] srcDoc   Исходный xmlDocPtr (in)
-     * @param[out] procDoc Указатель для нового xmlDocPtr processed (out)
-     * @param[out] exclDoc Указатель для нового xmlDocPtr excluded (out)
+     * @brief Создает пустые выходные XML-документы для отфильтрованных данных (processed) и исключенных данных (excluded).
+     * @param[in] srcDoc   Указатель на исходный XML-документ xmlDocPtr
+     * @param[out] procDoc Указатель на новый XML-документ для отфилтрованных данных xmlDocPtr processed.
+     * @param[out] exclDoc Указатель на новый XML-документ для исключенных данных xmlDocPtr excluded.
      *
      * @details
-     * Копирует корневой узел без дочерних элементов для каждого документа
-     * и устанавливает их root через xmlDocSetRootElement().
-     *
+     * Метод создает копии структуры исходного XML-документа, сохранив имя корневого элемента, все пространства имен (включая привязку) и его аттрибуты.
+     * Эти документы (procDoc и exclDoc) используются для последующего добавления фильтрованных данных (например, записей, соответствующих или не соответствующих критериям). Это позволяет сохранить целостность структуры XML при разделении данных.
+     * 
+     * @warning Переменные procDoc и exclDoc должны быть объявлены как xmlDocPtr в коде до вызова метода.
+     * 
      * @code
      xmlDocPtr p, e;
      createOutputDocuments(src, p, e);
@@ -314,4 +364,65 @@ class XMLProcessor {
      */
   void saveResults(const std::string &xmlPath, xmlDocPtr procDoc,
                    xmlDocPtr exclDoc, bool hasClean, bool hasMatch);
+
+  std::vector<NodeAnalysisResult> collectAndAnalyzeNodes(xmlXPathContextPtr ctx);
+    std::map<xmlNodePtr, ObjectBoundary> findOptimalObjectBoundaries(
+        const std::vector<xmlNodePtr>& nodesToRemove);
+    xmlNodePtr findNearestCommonContainer(const std::vector<xmlNodePtr>& nodes);
+    int calculateNodeDepth(xmlNodePtr node);
+    std::string buildNodePath(xmlNodePtr node);
+    void buildOutputStructure(
+    xmlDocPtr srcDoc, 
+    const std::map<xmlNodePtr, ObjectBoundary>& objectsToRemove,
+    xmlDocPtr targetDoc, 
+    bool isExcludedDoc);
+    /**
+     * @brief Рекурсивно копирует узлы с фильтрацией
+     * @param srcNode Исходный узел
+     * @param targetParent Родительский узел в целевом документе
+     * @param objectsToRemove Карта объектов, помеченных для удаления
+     * @param includeRemoved true - копировать объекты, помеченные для удаления
+     * @param includeUnmatched true - копировать объекты, НЕ помеченные для удаления
+     */
+    void copyNodeWithFiltering(xmlNodePtr srcNode, 
+                              xmlNodePtr targetParent,
+                              const std::map<xmlNodePtr, ObjectBoundary>& objectsToRemove,
+                              bool includeRemoved,
+                              bool includeUnmatched);
+    bool shouldKeepContainer(xmlNodePtr containerNode, 
+                           const std::map<xmlNodePtr, ObjectBoundary>& removedObjects);
+    bool isNodeMarkedForRemoval(xmlNodePtr node, 
+                               const std::map<xmlNodePtr, ObjectBoundary>& objectsToRemove);
+    void copyNodeAttributes(xmlNodePtr srcNode, xmlNodePtr targetNode);
+    void copyNodeNamespace(xmlNodePtr srcNode, xmlNodePtr targetNode, xmlDocPtr targetDoc);
+
+   /**
+     * @brief Обновить счётчик записей в документе
+     * @param doc Целевой документ (processed или excluded)
+     * @param recordCountConfig Конфигурация счётчика из config
+     * @param newCount Новое значение счётчика
+     * @return true если счётчик был успешно обновлён, false если элемент не найден
+     */
+    bool updateRecordCount(xmlDocPtr doc, 
+                          const RecordCountConfig& recordCountConfig,
+                          int newCount);
+
+    /**
+     * @brief Найти элемент по XPath для обновления счётчика
+     * @param doc Документ для поиска
+     * @param xpath XPath выражение
+     * @return Найденный узел или nullptr
+     */
+    xmlNodePtr findRecordCountElement(xmlDocPtr doc, const std::string& xpath);
+
+    /**
+     * @brief Обновить значение атрибута или текстового содержимого
+     * @param node Узел для обновления
+     * @param attributeName Имя атрибута для обновления
+     * @param newValue Новое значение
+     * @return true если успешно обновлено
+     */
+    bool updateNodeValue(xmlNodePtr node, const std::string& attributeName, const std::string& newValue);
+
+    int readRecordCountFromSource(xmlDocPtr srcDoc);
 };
