@@ -55,21 +55,39 @@ TEST_F(SignalRouterTest, RegisterInvalidSignal) {
     EXPECT_THROW(router.registerHandler(SIGKILL, [](int){}), std::invalid_argument);
 }
 
+TEST_F(SignalRouterTest, UnregisterHandler_RemovesSignalFromMask) {
+    EXPECT_CALL(*mock_, sigprocmask(_, _, _)).WillOnce(Return(0));
+    EXPECT_CALL(*mock_, signalfd(_, _, _)).WillOnce(Return(1));
+    EXPECT_CALL(*mock_, sigprocmask(SIG_BLOCK, _, nullptr)).WillOnce(Return(0));
+    EXPECT_CALL(*mock_, signalfd(1, _, SFD_CLOEXEC | SFD_NONBLOCK)).WillOnce(Return(1));
+
+    stc::SignalRouter& router = stc::SignalRouter::instance();
+    router.registerHandler(SIGUSR1, [](int){});
+    EXPECT_NO_THROW(router.unregisterHandler(SIGUSR1));
+}
+
 TEST_F(SignalRouterTest, HandlerInvocation) {
     testing::MockFunction<void(int)> mockHandler;
     signalfd_siginfo fdsi;
     fdsi.ssi_signo = SIGUSR1;
 
-    EXPECT_CALL(*mock_, read(_, _, _))
+    EXPECT_CALL(*mock_, epoll_create1(EPOLL_CLOEXEC)).WillOnce(Return(2));
+    EXPECT_CALL(*mock_, epoll_ctl(2, EPOLL_CTL_ADD, _, _)).WillOnce(Return(0));
+    EXPECT_CALL(*mock_, read(1, _, sizeof(fdsi)))
         .WillOnce(DoAll(SetArgPointee<1>(fdsi), Return(sizeof(fdsi))));
-    
+    EXPECT_CALL(*mock_, epoll_wait(2, _, 10, 10))  // maxevents=10, timeout=10
+        .WillOnce(Return(1))
+        .WillOnce(Return(0))
+        .RetiresOnSaturation();
+
     EXPECT_CALL(mockHandler, Call(SIGUSR1)).Times(1);
-    
+
     stc::SignalRouter& router = stc::SignalRouter::instance();
     router.registerHandler(SIGUSR1, mockHandler.AsStdFunction());
     router.start();
-    
-    // Эмуляция цикла обработки
+
+    // Ждём, пока поток начнёт работу
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     router.stop();
 }
 
@@ -78,18 +96,25 @@ TEST_F(SignalRouterTest, MultipleHandlers) {
     signalfd_siginfo fdsi;
     fdsi.ssi_signo = SIGUSR2;
 
-    EXPECT_CALL(*mock_, read(_, _, _))
+    EXPECT_CALL(*mock_, epoll_create1(EPOLL_CLOEXEC)).WillOnce(Return(2));
+    EXPECT_CALL(*mock_, epoll_ctl(2, EPOLL_CTL_ADD, _, _)).WillOnce(Return(0));
+    EXPECT_CALL(*mock_, read(1, _, sizeof(fdsi)))
         .WillOnce(DoAll(SetArgPointee<1>(fdsi), Return(sizeof(fdsi))));
-    
+    EXPECT_CALL(*mock_, epoll_wait(2, _, 10, 10))  // maxevents=10, timeout=10
+        .WillOnce(Return(1))
+        .WillOnce(Return(0))
+        .RetiresOnSaturation();
+
     EXPECT_CALL(handler1, Call(SIGUSR2)).Times(1);
     EXPECT_CALL(handler2, Call(SIGUSR2)).Times(1);
-    
+
     stc::SignalRouter& router = stc::SignalRouter::instance();
     router.registerHandler(SIGUSR2, handler1.AsStdFunction());
     router.registerHandler(SIGUSR2, handler2.AsStdFunction());
     router.start();
-    
-    // Эмуляция цикла обработки
+
+    // Ждём, пока поток обработает сигнал
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     router.stop();
 }
 
@@ -100,9 +125,36 @@ TEST_F(SignalRouterTest, SignalFDError) {
     EXPECT_THROW(router.registerHandler(SIGUSR1, [](int){}), std::system_error);
 }
 
-TEST_F(SignalRouterTest, DoubleStart) {
+TEST_F(SignalRouterTest, StartAndStop_SetsRunningFlag) {
     stc::SignalRouter& router = stc::SignalRouter::instance();
+
+    EXPECT_CALL(*mock_, epoll_create1(EPOLL_CLOEXEC)).WillOnce(Return(2));
+    EXPECT_CALL(*mock_, epoll_ctl(_, _, _, _)).WillOnce(Return(0));
+
+    EXPECT_FALSE(router.isRunning());
     router.start();
-    EXPECT_NO_THROW(router.start()); // Должно игнорироваться
+    EXPECT_TRUE(router.isRunning());
     router.stop();
+    EXPECT_FALSE(router.isRunning());
+}
+
+TEST_F(SignalRouterTest, DoubleStart_AfterStop) {
+    stc::SignalRouter& router = stc::SignalRouter::instance();
+
+    EXPECT_CALL(*mock_, epoll_create1(EPOLL_CLOEXEC)).WillOnce(Return(2));
+    EXPECT_CALL(*mock_, epoll_ctl(_, _, _, _)).WillOnce(Return(0));
+
+    router.start();
+    router.stop();
+
+    EXPECT_CALL(*mock_, epoll_create1(EPOLL_CLOEXEC)).WillOnce(Return(3));
+    EXPECT_CALL(*mock_, epoll_ctl(_, _, _, _)).WillOnce(Return(0));
+
+    EXPECT_NO_THROW(router.start());  // После stop() можно перезапустить
+    router.stop();
+}
+
+TEST_F(SignalRouterTest, StopWithoutStart) {
+    stc::SignalRouter& router = stc::SignalRouter::instance();
+    EXPECT_NO_THROW(router.stop());  // Должно быть безопасно
 }

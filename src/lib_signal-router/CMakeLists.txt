@@ -1,17 +1,25 @@
 cmake_minimum_required(VERSION 3.15)
 project(STCSignalRouter LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+#Выявление платформы (поддерживаем только Linux)
+if(UNIX)
+    set(LINUX TRUE)
+    set(PLATFORM_NAME "Linux")
+else()
+    message(FATAL_ERROR "Unsupported OS: ${CMAKE_SYSTEM_NAME}")
+endif()
+
 # Опции сборки и тестирования
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
-option(ENABLE_DOXYGEN "Generate Doxygen documentation" OFF)
-option(ENABLE_CODE_STYLE_CHECK "Enable code style checks (clang-format, cppcheck)" ON)
-option(ENABLE_UNIT_TESTS "Enable unit tests" ON)
-option(ENABLE_VALGRIND_TESTS "Enable memory checks (valgrind)" ON)
-option(ENABLE_INTEGRATION_TESTS "Enable integration tests" ON)
+option(ENABLE_DOXYGEN "Generate Doxygen documentation" ON)
+option(ENABLE_CODE_STYLE_CHECK "Enable linter checks (clang-format, cppcheck)" OFF)
+option(ENABLE_UNIT_TESTS "Enable unit tests" OFF)
+option(ENABLE_VALGRIND_TESTS "Enable memory checks (valgrind)" OFF)
+option(ENABLE_INTEGRATION_TESTS "Enable integration tests" OFF)
 option(INSTALL_DEV_FILES "Install development files" ON)
 
 # Пути установки
@@ -68,12 +76,10 @@ if(ENABLE_CODE_STYLE_CHECK)
     find_program(CLANG_FORMAT_EXE clang-format)
     find_program(CPPCHECK_EXE cppcheck)
     if(NOT CLANG_FORMAT_EXE)
-        message(STATUS "Installing clang-format...")
-        execute_process(COMMAND sudo apt-get install -y clang-format)
+        message(FATAL_ERROR "clang-format not found. Install it or disable ENABLE_CODE_STYLE_CHECK")
     endif()
     if(NOT CPPCHECK_EXE)
-        message(STATUS "Installing cppcheck...")
-        execute_process(COMMAND sudo apt-get install -y cppcheck)
+        message(FATAL_ERROR "cppcheck not found. Install it or disable ENABLE_CODE_STYLE_CHECK")
     endif()
     file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.hpp *.h)
     add_custom_target(style_check
@@ -84,38 +90,38 @@ if(ENABLE_CODE_STYLE_CHECK)
 endif()
 
 # Unit-тесты
-# if(ENABLE_UNIT_TESTS)
-#     enable_testing()
-#     find_package(GTest REQUIRED)
-#     add_executable(SignalRouterTest tests/SignalRouterUtest.cpp src/SignalRouter.cpp)
-#     target_include_directories(SignalRouterTest PRIVATE include)
-#     target_link_libraries(SignalRouterTest GTest::GTest GTest::Main pthread)
-#     add_test(NAME SignalRouterTest COMMAND SignalRouterTest)
-# endif()
+if(ENABLE_UNIT_TESTS)
+    enable_testing()
+    find_package(GTest REQUIRED)
+    add_executable(SignalRouterTest tests/SignalRouterUtest.cpp src/SignalRouter.cpp)
+    target_include_directories(SignalRouterTest PRIVATE include)
+    target_link_libraries(SignalRouterTest GTest::GTest GTest::Main pthread)
+    add_test(NAME SignalRouterTest COMMAND SignalRouterTest)
+endif()
 
 # Valgrind memory check
-# if(ENABLE_VALGRIND_TESTS)
-#     find_program(VALGRIND_EXE valgrind)
-#     if(NOT VALGRIND_EXE)
-#         message(STATUS "Installing valgrind...")
-#         execute_process(COMMAND sudo apt-get install -y valgrind)
-#     endif()
-#     add_test(NAME MemoryCheck
-#         COMMAND ${VALGRIND_EXE} --leak-check=full --error-exitcode=1 $<TARGET_FILE:SignalRouterTest>
-#     )
-# endif()
+if(ENABLE_VALGRIND_TESTS)
+    find_program(VALGRIND_EXE valgrind)
+    if(NOT VALGRIND_EXE)
+        message(STATUS "Installing valgrind...")
+        execute_process(COMMAND sudo apt-get install -y valgrind)
+    endif()
+    add_test(NAME MemoryCheck
+        COMMAND ${VALGRIND_EXE} --leak-check=full --error-exitcode=1 $<TARGET_FILE:SignalRouterTest>
+    )
+endif()
 
 # Интеграционные тесты
-# if(ENABLE_INTEGRATION_TESTS)
-#     find_program(BASH_EXE bash)
-#     if(NOT BASH_EXE)
-#         message(STATUS "Installing bash shell...")
-#         execute_process(COMMAND sudo apt-get install -y bash)
-#     endif()
-#     add_test(NAME IntegrationTest
-#         COMMAND ${BASH_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration_test.sh
-#     )
-# endif()
+if(ENABLE_INTEGRATION_TESTS)
+    find_program(BASH_EXE bash)
+    if(NOT BASH_EXE)
+        message(STATUS "Installing bash shell...")
+        execute_process(COMMAND sudo apt-get install -y bash)
+    endif()
+    add_test(NAME IntegrationTest
+        COMMAND ${BASH_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration_test.sh
+    )
+endif()
 
 # Сборка перед тестами
 if(ENABLE_UNIT_TESTS OR ENABLE_VALGRIND_TESTS OR ENABLE_INTEGRATION_TESTS)
