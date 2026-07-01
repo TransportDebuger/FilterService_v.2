@@ -1,0 +1,76 @@
+Vagrant.configure("2") do |config|
+    config.vm.box = "ubuntu/jammy64"
+    # config.vm.box_version = "20240821.0.1"
+    config.vm.boot_timeout = 600
+
+    config.vm.provider "virtualbox" do |vb| # virtualbox default config (all VM's if not overrided)
+        vb.gui = false
+        vb.cpus = 2
+        vb.memory = 4096
+    end
+    config.vm.synced_folder ".", "/vagrant", disabled: true # Changes default vagrant behavior (can be skippped)
+
+    config.vm.define "xmlfilter-server" do |server|
+        server.vm.provider "virtualbox" do |vb| # virtualbox config
+            vb.name = "xmlfilter-server" # virtualbox guest name
+        end
+        server.vm.hostname = "xmlfilter-server" # Guest hostname
+        server.vm.network "private_network", ip: "192.168.56.10" # Guest IP
+        # Port forwarding config
+        # SSH port
+        server.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+        # configuration application port
+        server.vm.network "forwarded_port", guest: 8000, host: 5000, id: "http"
+
+        # Synced folder config
+        # Application folder
+        server.vm.synced_folder "../test/app_bin", "/opt/xmlfilter", 
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"],
+                                        type: "rsync"
+        # web application for service configuration
+        server.vm.synced_folder "../test/config_app", "/opt/xmlfilter/config_app", 
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"],
+                                        type: "rsync"
+        # Application config folder (default config folder)
+        server.vm.synced_folder "../test/app_config", "/etc/stc/xmlfilter", 
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Application config folder
+        server.vm.synced_folder "../test/app_comparison_list", "/opt/xmlfilter/list", 
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Application logs folder
+        server.vm.synced_folder "../test/app_logs", "/host/logs", 
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Test files incoming flow folder
+        server.vm.synced_folder "../test/incoming", "/host/incoming",
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Test files outgoing flow folder
+        server.vm.synced_folder "../test/outgoing", "/host/outgoing",
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Test files filtered flow folder (outgoing)
+        server.vm.synced_folder "../test/filtered", "/host/filtered",
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # Bad data flow folder (outgoing)
+        server.vm.synced_folder "../test/bad_data", "/host/bad",
+                                        owner: "vagrant", 
+                                        group: "vagrant", 
+                                        mount_options: ["dmode=775", "fmode=664"]
+        # host configuuration provisioning
+        server.vm.provision "shell", path: "provision/prerequisits.sh"
+    end
+end

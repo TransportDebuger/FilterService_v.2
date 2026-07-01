@@ -64,6 +64,7 @@ cmake_install.cmake
 Makefile
 
 # Test results
+test/
 Testing/
 test_results/
 *.gcov
