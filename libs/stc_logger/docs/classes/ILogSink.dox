@@ -1,0 +1,52 @@
+/**
+ * @class stc::logger::ILogSink
+ * @details 
+ * Интерфейс `ILogSink` реализует паттерн "Наблюдатель" (Observer) и "Стратегия" 
+ * (Strategy), позволяя динамически подменять механизмы доставки логов без 
+ * изменения кода диспетчера (`Logger`).
+ * 
+ * @par Архитектурная роль и разделение ответственности
+ * Ключевой особенностью интерфейса является разделение этапов форматирования 
+ * и физической записи:
+ * 1. **Форматирование**: Выполняется форматтером, полученным через `GetFormatter()`. 
+ *    Это позволяет одному и тому же Sink'у всегда использовать специфичный для 
+ *    него формат (например, `JsonFormatter` для `FileSink` и `TextFormatter` 
+ *    для `ConsoleSink`).
+ * 2. **Запись**: Метод `Write()` принимает уже готовую строку (`formatted_message`). 
+ *    Это критически важно для производительности: диспетчер форматирует сообщение 
+ *    один раз, а затем передает его всем зарегистрированным Sink'ам.
+ * 
+ * @par Гарантии потокобезопасности
+ * Метод `Write()` вызывается из множества потоков одновременно (через 
+ * `shared_lock` диспетчера). Следовательно, конкретные реализации Sink'ов 
+ * **обязаны** быть потокобезопасными (thread-safe). Обычно это достигается 
+ * использованием внутреннего `std::mutex` для защиты операций ввода-вывода 
+ * или передачей данных в фоновый поток (как в `AsyncFileSink`).
+ * 
+ * @par Локальная фильтрация
+ * Метод `GetFilter()` позволяет Sink'у иметь собственный, независимый от 
+ * глобальных фильтров, механизм отсечения сообщений. Если метод возвращает 
+ * `nullptr`, диспетчер пропускает этап локальной фильтрации для данного Sink'а.
+ * 
+ * @par Пример кастомной реализации
+ * @code{.cpp}
+ * class NetworkSink final : public ILogSink {
+ *  public:
+ *   NetworkSink(std::shared_ptr<ILogFormatter> fmt) : formatter_(std::move(fmt)) {}
+ * 
+ *   void Write(const LogRecord&, std::string_view msg) override {
+ *     std::lock_guard lock(mutex_);
+ *     socket_.send(msg.data(), msg.size());
+ *   }
+ * 
+ *   void Flush() override { /* ... */ }
+ *   std::shared_ptr<ILogFormatter> GetFormatter() const noexcept override { return formatter_; }
+ *   std::shared_ptr<ILogFilter> GetFilter() const noexcept override { return nullptr; }
+ * 
+ *  private:
+ *   std::shared_ptr<ILogFormatter> formatter_;
+ *   std::mutex mutex_;
+ *   // NetworkSocket socket_;
+ * };
+ * @endcode
+ */

@@ -1,0 +1,19 @@
+/**
+ * @file group_formatting.dox
+ * @brief Определение группы "Formatting" (Форматирование).
+ */
+
+/**
+ * @defgroup group_formatting Formatting (Форматирование)
+ * @brief Конкретные реализации форматтеров лог-сообщений.
+ * @details Модуль содержит прикладные реализации интерфейса ILogFormatter, 
+ * определенного в ядре (Core). Включает специализированные классы для 
+ * сериализации структуры LogRecord в различные форматы (например, 
+ * Plain Text, JSON), определяющие конечное представление лога в приемнике.
+ * @{
+ * @class stc::logger::ILogFormatter
+ * @class stc::logger::TextFormatter
+ * @class stc::logger::JsonFormatter
+ * @class stc::logger::XmlFormatter
+ * @} 
+ */

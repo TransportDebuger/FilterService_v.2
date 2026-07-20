@@ -1,0 +1,207 @@
+/**
+ * @page page_build_system Системы сборки и CI/CD
+ * 
+ * @section build_overview Общие положения
+ * Библиотека stc::logger использует систему сборки CMake (минимальная версия 3.20). 
+ * Проект строго требует поддержки стандарта C++20 (в частности, `std::jthread` и 
+ * `std::stop_token`). Целевой операционной системой является Linux (POSIX).
+ * 
+ * Система сборки предоставляет набор специализированных целей (targets) для 
+ * комплексного тестирования, статического анализа и генерации отчетов о покрытии.
+ * 
+ * @section build_cmake CMake
+ * 
+ * @subsection cmake_overview Обзор
+ * CMake предоставляет кроссплатформенный подход к сборке с двухэтапным процессом: 
+ * конфигурация и сборка. CMakeLists.txt генерирует файлы сборки для выбранной 
+ * системы (Make, Ninja и др.).
+ * 
+ * @subsection cmake_configuration Конфигурация проекта
+ * Перед сборкой необходимо выполнить конфигурацию проекта. Библиотека поддерживает 
+ * следующие опции конфигурации:
+ * 
+ * @par Доступные опции конфигурации:
+ * @li @b STC_LOGGER_BUILD_TESTS: Сборка юнит- и интеграционных тестов (GoogleTest). 
+ *     По умолчанию: @c ON.
+ * @li @b STC_LOGGER_ENABLE_COVERAGE: Включение флагов покрытия кода (@c --coverage). 
+ *     По умолчанию: @c OFF.
+ * @li @b STC_LOGGER_ENABLE_SANITIZERS: Включение AddressSanitizer (ASan) и 
+ *     UndefinedBehaviorSanitizer (UBSan). По умолчанию: @c OFF.
+ * 
+ * @par Базовая конфигурация:
+ * @code{.bash}
+ * # Создание директории сборки и конфигурация (Debug-сборка для тестов)
+ * cmake -B build -DCMAKE_BUILD_TYPE=Debug -DSTC_LOGGER_BUILD_TESTS=ON
+ * 
+ * # Конфигурация с включенными санитайзерами
+ * cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+ *       -DSTC_LOGGER_ENABLE_SANITIZERS=ON \
+ *       -DSTC_LOGGER_BUILD_TESTS=ON
+ * @endcode
+ * 
+ * @subsection cmake_commands Полный справочник команд CMake
+ * 
+ * @par cmake --build build
+ * Компиляция библиотеки и всех включенных целей.
+ * @code{.bash}
+ * cmake --build build -j$(nproc)
+ * @endcode
+ * 
+ * @par cmake --install build
+ * Установка заголовочных файлов, скомпилированной библиотеки и CMake-экспортов 
+ * в системные директории (или в путь, указанный через @c CMAKE_INSTALL_PREFIX).
+ * @code{.bash}
+ * cmake --install build
+ * cmake --install build --prefix ./my_install
+ * @endcode
+ * 
+ * @par cmake --build build --target linter-test
+ * Проверка стиля кода с помощью @c clang-format (Google Style) и статический 
+ * анализ с помощью @c cppcheck.
+ * @code{.bash}
+ * cmake --build build --target linter-test
+ * @endcode
+ * 
+ * @par cmake --build build --target unit-test
+ * Автоматическая конфигурация временной директории сборки с включенным покрытием 
+ * (@c STC_LOGGER_ENABLE_COVERAGE=ON), компиляция тестов и их запуск через CTest.
+ * @code{.bash}
+ * cmake --build build --target unit-test
+ * @endcode
+ * 
+ * @par cmake --build build --target mem-test
+ * Двухэтапная проверка памяти:
+ * 1. Сборка и запуск тестов с санитайзерами (ASan/UBSan).
+ * 2. Сборка и запуск юнит-тестов под управлением Valgrind (@c --leak-check=full).
+ * @code{.bash}
+ * cmake --build build --target mem-test
+ * @endcode
+ * 
+ * @par cmake --build build --target integr-test
+ * Запуск исключительно интеграционных тестов (фильтр CTest @c -R "Integration").
+ * @code{.bash}
+ * cmake --build build --target integr-test
+ * @endcode
+ * 
+ * @par cmake --build build --target gcov-report
+ * Генерация HTML-отчета о покрытии кода тестами с использованием @c lcov и 
+ * @c genhtml. Отчет сохраняется в @c build/coverage_report/.
+ * @code{.bash}
+ * cmake --build build --target gcov-report
+ * @endcode
+ * 
+ * @par cmake --build build --target test-all
+ * Запуск полного цикла верификации в строгой последовательности:
+ * @c linter-test -> @c unit-test -> @c mem-test -> @c integr-test -> @c gcov-report.
+ * @code{.bash}
+ * cmake --build build --target test-all
+ * @endcode
+ *
+ * @par cmake --build build --target docs
+ * Генерация HTML-документации API с использованием Doxygen. 
+ * Требует наличия конфигурационного файла @c docs/Doxyfile и установленной 
+ * утилиты @c doxygen в системе. Документация сохраняется в директорию, 
+ * указанную в @c Doxyfile (обычно @c docs/html/).
+ * @code{.bash}
+ * cmake --build build --target docs
+ * @endcode
+ * @note Если Doxygen не найден при конфигурации CMake, выполнение цели 
+ * завершится фатальной ошибкой.
+ * 
+ * @section build_ci Интеграция с CI/CD
+ * 
+ * @subsection ci_github GitHub Actions
+ * 
+ * @par Пример конфигурации .github/workflows/build.yml:
+ * @code{.yaml}
+ * name: Build and Verify stc::logger
+ * 
+ * on:
+ *   push:
+ *     branches: [ main, develop ]
+ *   pull_request:
+ *     branches: [ main ]
+ * 
+ * jobs:
+ *   build-and-test:
+ *     runs-on: ubuntu-latest
+ *     
+ *     steps:
+ *     - uses: actions/checkout@v4
+ *     
+ *     - name: Install dependencies
+ *       run: |
+ *         sudo apt-get update
+ *         sudo apt-get install -y \
+ *           g++ \
+ *           cmake \
+ *           clang-format \
+ *           cppcheck \
+ *           valgrind \
+ *           lcov \
+ *     
+ *     - name: Configure CMake
+ *       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DSTC_LOGGER_BUILD_TESTS=ON
+ *     
+ *     - name: Run full test suite
+ *       run: cmake --build build --target test-all
+ *     
+ *     - name: Upload coverage report
+ *       uses: actions/upload-artifact@v4
+ *       with:
+ *         name: coverage-report
+ *         path: build/coverage_report/
+ * @endcode
+ * 
+ * @subsection ci_gitlab GitLab CI
+ * 
+ * @par Пример конфигурации .gitlab-ci.yml:
+ * @code{.yaml}
+ * stages:
+ *   - build
+ *   - verify
+ *   - report
+ * 
+ * variables:
+ *   CMAKE_BUILD_DIR: build
+ * 
+ * before_script:
+ *   - apt-get update -qq
+ *   - apt-get install -y -qq g++ cmake clang-format cppcheck valgrind lcov
+ * 
+ * build:
+ *   stage: build
+ *   script:
+ *     - cmake -B $CMAKE_BUILD_DIR -DCMAKE_BUILD_TYPE=Debug -DSTC_LOGGER_BUILD_TESTS=ON
+ *     - cmake --build $CMAKE_BUILD_DIR
+ *   artifacts:
+ *     paths:
+ *       - $CMAKE_BUILD_DIR/
+ *     expire_in: 1 hour
+ * 
+ * linter-and-memory-tests:
+ *   stage: verify
+ *   script:
+ *     - cmake --build $CMAKE_BUILD_DIR --target linter-test
+ *     - cmake --build $CMAKE_BUILD_DIR --target mem-test
+ *   dependencies:
+ *     - build
+ * 
+ * coverage-report:
+ *   stage: report
+ *   script:
+ *     - cmake --build $CMAKE_BUILD_DIR --target unit-test
+ *     - cmake --build $CMAKE_BUILD_DIR --target gcov-report
+ *   artifacts:
+ *     paths:
+ *       - $CMAKE_BUILD_DIR/coverage_report/
+ *     expire_in: 1 week
+ *   dependencies:
+ *     - build
+ * @endcode
+ * 
+ * @section build_links Связанные документы
+ * @li @ref page_architecture — общая архитектура библиотеки и диаграмма классов
+ * @li @ref page_build_and_integration — требования к окружению и интеграция в сторонние проекты
+ * @li @ref page_testing — методология тестирования и верификации
+ */

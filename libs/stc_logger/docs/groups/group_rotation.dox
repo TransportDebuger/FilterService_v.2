@@ -1,0 +1,20 @@
+/**
+ * @file group_rotation.dox
+ * @brief Определение группы "Rotation" (Стратегии ротации).
+ */
+
+/**
+ * @defgroup group_logger_rotation Rotation (Стратегии ротации)
+ * @brief Политики и стратегии ротации лог-файлов.
+ * @details Модуль содержит интерфейс IRotationPolicy и его конкретные 
+ * реализации. Отвечает за принятие решений о необходимости архивации, 
+ * генерацию имен и управление жизненным циклом файлов на диске. 
+ * Физическое взаимодействие с файловой системой делегировано приемникам 
+ * (FileSink, AsyncFileSink).
+ * @{
+ * @class stc::logger::IRotationPolicy
+ * @class stc::logger::SizeRotationPolicy
+ * @class stc::logger::TimeRotationPolicy
+ * @class stc::logger::CircularRotationPolicy
+ * @} 
+ */

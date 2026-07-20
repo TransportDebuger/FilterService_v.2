@@ -1,0 +1,160 @@
+/**
+ * @page page_architecture Архитектура библиотеки
+ * @brief Фундаментальные принципы, паттерны проектирования и структурная организация подсистемы логирования.
+ *
+ * @section arch_principles Базовые архитектурные принципы
+ * Библиотека спроектирована с опорой на следующие фундаментальные принципы:
+ * - **Разделение ответственности (Separation of Concerns)**: Логика принятия 
+ *   решений (когда ротировать, как форматировать, что фильтровать) строго 
+ *   отделена от логики физического ввода-вывода (запись в файл, консоль).
+ * - **Инверсия зависимостей (Dependency Inversion)**: Ядро (@ref group_logger_core) 
+ *   зависит исключительно от абстракций (интерфейсов). Конкретные реализации 
+ *   приемников, форматтеров и стратегий инжектируются на этапе конфигурации.
+ * - **Иммутабельность конфигурации**: Объекты стратегий и форматтеров, будуч 
+ *   созданными, не изменяют своего состояния. Это гарантирует их 
+ *   потокобезопасность и возможность безопасного переиспользования между 
+ *   различными приемниками.
+ *
+ * @section arch_patterns Паттерны проектирования
+ * В основе реализации лежат следующие паттерны:
+ * - **Стратегия (Strategy)**: Используется для инкапсуляции алгоритмов ротации 
+ *   (@ref group_logger_rotation), форматирования (@ref group_formatting) и 
+ *   фильтрации (@ref group_logger_filtering). Позволяет изменять поведение 
+ *   приемников без модификации их исходного кода.
+ * - **Производитель-Потребитель (Producer-Consumer)**: Реализован в 
+ *   @ref stc::logger::AsyncFileSink. Вызывающий поток (Producer) помещает 
+ *   сообщения в lock-free очередь, а выделенный фоновый поток (Consumer) 
+ *   осуществляет пакетную запись (batching) на диск.
+ * - **Диспетчер (Dispatcher)**: Класс @ref stc::logger::Logger выступает в роли 
+ *   центрального узла маршрутизации, обеспечивая потокобезопасную итерацию 
+ *   по зарегистрированным приемникам и применение глобальных фильтров.
+ *
+ * @section arch_diagram Диаграмма классов
+ * Ниже представлена диаграмма классов, отражающая ключевые взаимосвязи 
+ * между ядром, приемниками, стратегиями ротации, форматтерами и фильтрами.
+ * 
+ * @dot
+ * digraph LoggerArchitecture {
+ *   rankdir=LR;
+ *   node [shape=record, fontname="Helvetica", fontsize=10, style=filled, fillcolor="#f5f5f5"];
+ *   edge [fontname="Helvetica", fontsize=9];
+ *   graph [fontname="Helvetica", label="Архитектура подсистемы логирования stc::logger", fontsize=14];
+ *
+ *   // --- Ядро (Core) ---
+ *   subgraph cluster_core {
+ *     label="Core (Ядро)";
+ *     style=dashed;
+ *     color="#4a90e2";
+ *     Logger       [label="{Logger|+ Instance()\l+ AddSink()\l+ SetFilter()\l+ Log()\l}"];
+ *     LogRecord    [label="{LogRecord|+ level\l+ timestamp\l+ source\l+ message\l}"];
+ *     ILogSink     [label="{\<\<interface\>\>\nILogSink|+ Write()\l+ Flush()\l}"];
+ *     ILogFormatter[label="{\<\<interface\>\>\nILogFormatter|+ Format()\l}"];
+ *     ILogFilter   [label="{\<\<interface\>\>\nILogFilter|+ ShouldLog()\l}"];
+ *   }
+ *
+ *   // --- Приемники (Sinks) ---
+ *   subgraph cluster_sinks {
+ *     label="Sinks (Приемники)";
+ *     style=dashed;
+ *     color="#7ed321";
+ *     ConsoleSink   [label="{ConsoleSink}"];
+ *     FileSink      [label="{FileSink|- file_stream_\l- current_size_\l- mutex_\l}"];
+ *     AsyncFileSink [label="{AsyncFileSink|- worker_thread_\l- queue_\l- queue_cv_\l}"];
+ *   }
+ *
+ *   // --- Стратегии ротации (Rotation) ---
+ *   subgraph cluster_rotation {
+ *     label="Rotation (Стратегии ротации)";
+ *     style=dashed;
+ *     color="#f5a623";
+ *     IRotationPolicy       [label="{\<\<interface\>\>\nIRotationPolicy|+ ShouldRotate()\l+ GenerateRotatedFileName()\l+ OnRotationCompleted()\l}"];
+ *     SizeRotationPolicy    [label="{SizeRotationPolicy|- max_size_bytes_\l- max_archives_\l}"];
+ *     TimeRotationPolicy    [label="{TimeRotationPolicy|- interval_\l- next_rotation_time_\l- mutex_\l}"];
+ *     CircularRotationPolicy[label="{CircularRotationPolicy|- max_size_bytes_\l- max_archives_\l- next_index_ (atomic)\l}"];
+ *   }
+ *
+ *   // --- Форматтеры (Formatting) ---
+ *   subgraph cluster_formatting {
+ *     label="Formatting (Форматирование)";
+ *     style=dashed;
+ *     color="#bd10e0";
+ *     TextFormatter [label="{TextFormatter}"];
+ *     JsonFormatter [label="{JsonFormatter}"];
+ *     XmlFormatter  [label="{XmlFormatter}"];
+ *   }
+ *
+ *   // --- Фильтры (Filtering) ---
+ *   subgraph cluster_filtering {
+ *     label="Filtering (Фильтрация)";
+ *     style=dashed;
+ *     color="#d0021b";
+ *     LevelFilter  [label="{LevelFilter}"];
+ *     SourceFilter [label="{SourceFilter}"];
+ *   }
+ *
+ *   // --- Наследование (реализация интерфейсов) ---
+ *   edge [dir=back, arrowtail=empty, color="#333333"];
+ *   ConsoleSink   -> ILogSink;
+ *   FileSink      -> ILogSink;
+ *   AsyncFileSink -> ILogSink;
+ *
+ *   SizeRotationPolicy     -> IRotationPolicy;
+ *   TimeRotationPolicy     -> IRotationPolicy;
+ *   CircularRotationPolicy -> IRotationPolicy;
+ *
+ *   TextFormatter -> ILogFormatter;
+ *   JsonFormatter -> ILogFormatter;
+ *   XmlFormatter  -> ILogFormatter;
+ *
+ *   LevelFilter  -> ILogFilter;
+ *   SourceFilter -> ILogFilter;
+ *
+ *   // --- Композиция и агрегация (shared_ptr зависимости) ---
+ *   edge [dir=forward, arrowhead=diamond, style=dashed, color="#666666"];
+ *   Logger -> ILogSink     [label="1..*"];
+ *   Logger -> ILogFilter   [label="0..1\n(global)"];
+ *
+ *   FileSink      -> ILogFormatter;
+ *   FileSink      -> ILogFilter      [label="0..1\n(local)"];
+ *   FileSink      -> IRotationPolicy [label="0..1"];
+ *
+ *   AsyncFileSink -> ILogFormatter;
+ *   AsyncFileSink -> ILogFilter      [label="0..1\n(local)"];
+ *   AsyncFileSink -> IRotationPolicy [label="0..1"];
+ *
+ *   ConsoleSink   -> ILogFormatter;
+ *
+ *   // --- Использование LogRecord ---
+ *   edge [dir=forward, arrowhead=open, style=dotted, color="#999999"];
+ *   Logger    -> LogRecord [label="creates"];
+ *   ILogSink  -> LogRecord [label="consumes"];
+ *   ILogFormatter -> LogRecord [label="serializes"];
+ *   ILogFilter    -> LogRecord [label="inspects"];
+ * }
+ * @enddot
+ *
+ * @section arch_sync_async Синхронная и асинхронная модели ввода-вывода
+ * Библиотека предоставляет две взаимодополняющие модели доставки логов:
+ * 1. **Синхронная модель** (@ref stc::logger::FileSink): 
+ *    Гарантирует строгий порядок и немедленную передачу данных в буферы ОС. 
+ *    Блокирует вызывающий поток. Применяется в сценариях, где потеря 
+ *    последних строк лога при аварийном завершении (crash) недопустима, 
+ *    а интенсивность логирования умеренная.
+ * 2. **Асинхронная модель** (@ref stc::logger::AsyncFileSink): 
+ *    Обеспечивает минимальную задержку (latency) в бизнес-потоках за счет 
+ *    переноса операций I/O в фоновый поток. Применяется в высоконагруженных 
+ *    системах (HighLoad), где пропускная способность и отсутствие блокировок 
+ *    критичнее, чем гарантия доставки каждого байта при внезапном отказе 
+ *    оборудования (OOM Kill, SIGKILL).
+ *
+ * @section arch_thread_safety Потокобезопасность и управление ресурсами
+ * - **RAII**: Все файловые дескрипторы и фоновые потоки управляются через 
+ *   механизмы RAII. Деструктор @ref stc::logger::AsyncFileSink гарантирует 
+ *   корректное завершение (graceful shutdown) фонового потока и сброс 
+ *   очереди на диск благодаря использованию `std::jthread` и `std::stop_token`.
+ * - **Гранулярность блокировок**: В синхронных приемниках мьютекс защищает 
+ *   только файловый поток и счетчик размера. В асинхронных приемниках 
+ *   используются раздельные мьютексы и condition variables для очереди 
+ *   данных и механизма принудительного сброса (Flush), что предотвращает 
+ *   взаимные блокировки (deadlocks).
+ */

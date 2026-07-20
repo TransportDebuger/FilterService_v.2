@@ -1,0 +1,18 @@
+/**
+ * @file group_filtering.dox
+ * @brief Определение группы "Filtering" (Фильтрация).
+ */
+
+/**
+ * @defgroup group_logger_filtering Filtering (Фильтрация)
+ * @brief Конкретные реализации фильтров лог-сообщений.
+ * @details Модуль содержит прикладные реализации интерфейса ILogFilter, 
+ * определенного в ядре (Core). Включает классы для отсечения 
+ * нежелательных сообщений на основе заданных критериев (уровень важности, 
+ * контекст, регулярные выражения) до их передачи в приемник (Sink).
+ * @{
+ * @class stc::logger::ILogFilter
+ * @class stc::logger::LevelFilter
+ * @class stc::logger::SourceFilter
+ * @} 
+ */

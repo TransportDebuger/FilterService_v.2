@@ -1,0 +1,21 @@
+/**
+ * @file group_core.dox
+ * @brief Определение группы "Core" (Ядро).
+ */
+
+/**
+ * @defgroup group_logger_core Core (Ядро)
+ * @brief Базовые компоненты, интерфейсы и диспетчер логирования.
+ * @details Модуль содержит фундаментальные абстракции библиотеки: 
+ * диспетчер записей, структуру лог-сообщения и контракты (интерфейсы) 
+ * для приемников, форматтеров и фильтров. Все компоненты модуля 
+ * являются потокобезопасными и не зависят от конкретных реализаций 
+ * ввода-вывода.
+ * @{
+ * @class stc::logger::Logger
+ * @class stc::logger::LogRecord
+ * @class stc::logger::ILogSink
+ * @class stc::logger::ILogFormatter
+ * @class stc::logger::ILogFilter
+ * @}
+ */

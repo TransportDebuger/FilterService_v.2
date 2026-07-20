@@ -1,0 +1,33 @@
+/**
+ * @class stc::logger::SourceFilter
+ * @details 
+ * Класс `SourceFilter` реализует механизм фильтрации логов на основе метаданных 
+ * места вызова, захваченных через `std::source_location` (имя файла или сигнатура функции).
+ * 
+ * @par Режимы работы (Whitelist и Blacklist)
+ * По умолчанию фильтр работает в режиме **Whitelist** (`invert = false`): 
+ * пропускаются только те сообщения, источник которых совпадает с заданным шаблоном.
+ * Если при конструировании передан параметр `invert = true`, фильтр переключается 
+ * в режим **Blacklist**: пропускаются все сообщения, КРОМЕ тех, что совпадают с шаблоном.
+ * Это удобно, например, для отсечения шумных библиотечных модулей или системных вызовов.
+ * 
+ * @par Потокобезопасность и производительность
+ * Класс является **Immutable** (неизменяемым после конструирования). 
+ * Все поля (`pattern_`, `target_`, `mode_`, `invert_`) устанавливаются один раз.
+ * Это делает объект полностью потокобезопасным (thread-safe) без использования мьютексов.
+ * 
+ * В методе `ShouldPass` извлечение имени файла и функции из `std::source_location` 
+ * происходит через `std::string_view`, что исключает аллокации памяти в куче 
+ * на этапе сравнения.
+ * 
+ * @par Пример использования
+ * @code{.cpp}
+ * // Пропускаем логи только из файлов, содержащих "network" в имени
+ * auto network_filter = std::make_shared<SourceFilter>(
+ *     "network", SourceMatchTarget::kFileName, SourceMatchMode::kContains);
+ * 
+ * // Игнорируем (черный список) все логи из модуля "legacy_module.cpp"
+ * auto legacy_blacklist = std::make_shared<SourceFilter>(
+ *     "legacy_module.cpp", SourceMatchTarget::kFileName, SourceMatchMode::kExact, true);
+ * @endcode
+ */

@@ -1,0 +1,32 @@
+/**
+ * @class stc::logger::ILogFormatter
+ * @details 
+ * Интерфейс `ILogFormatter` реализует паттерн "Стратегия" (Strategy), позволяя 
+ * динамически подменять алгоритмы сериализации логов без изменения кода 
+ * диспетчера (`Logger`) или приемников (`Sink`).
+ * 
+ * @par Архитектурная роль
+ * Каждый Sink владеет своим экземпляром форматтера. Это позволяет направлять 
+ * одни и те же сообщения в разные приемники в различных форматах одновременно. 
+ * Например, `ConsoleSink` может использовать `TextFormatter` для удобочитаемого 
+ * вывода, а `FileSink` — `JsonFormatter` для последующего парсинга системами 
+ * мониторинга (например, ELK Stack или Splunk).
+ * 
+ * @par Гарантии потокобезопасности
+ * Метод `Format()` вызывается из множества потоков одновременно (через 
+ * `shared_lock` диспетчера). Следовательно, конкретные реализации форматтеров 
+ * должны быть спроектированы так, чтобы их метод `Format` был потокобезопасным 
+ * (thread-safe) и не использовал разделяемое изменяемое состояние (shared mutable state).
+ * 
+ * @par Пример кастомной реализации
+ * @code{.cpp}
+ * class CsvFormatter final : public ILogFormatter {
+ *  public:
+ *   std::string Format(const LogRecord& record) const override {
+ *     return std::to_string(record.timestamp.time_since_epoch().count()) + "," +
+ *            LevelToString(record.level) + "," + 
+ *            record.message + "\n";
+ *   }
+ * };
+ * @endcode
+ */
