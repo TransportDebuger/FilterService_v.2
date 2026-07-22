@@ -1,0 +1,70 @@
+/**
+@page page_metrics_build Система сборки и интеграция stc::metrics
+
+Библиотека `stc::metrics` использует систему сборки CMake (минимальная версия 3.20). 
+Архитектура сборки спроектирована таким образом, чтобы обеспечить полную изоляцию 
+специализированных сборок (покрытие, санитайзеры) от основной логики, а также 
+предоставить исчерпывающий набор целей для непрерывной интеграции (CI/CD).
+
+@section build_deps Зависимости и стандарт
+Библиотека написана с использованием стандарта C++20 (обязателен для `std::jthread` 
+и атомарных операций). `stc::metrics` не имеет внешних зависимостей на уровне 
+продакшен-кода: используется исключительно стандартная библиотека C++. 
+Зависимость от GoogleTest возникает исключительно при включенной опции 
+`STC_METRICS_BUILD_TESTS` и управляется через механизм `FetchContent`.
+
+@section build_targets Кастомные цели сборки
+В корневом `CMakeLists.txt` определен набор агрегированных целей, обеспечивающих 
+комплексную верификацию кода:
+
+- <b>linter-test</b>: Последовательный запуск `clang-format` (стиль Google, режим 
+  `--dry-run --Werror`) и `cppcheck` (флаги `--enable=warning,style,performance,portability 
+  --std=c++20`). Завершается с ошибкой (Fail-Fast), если инструменты не найдены в системе.
+- <b>unit-test</b>: Конфигурирует изолированную сборку в директории `coverage_build` 
+  с включенным флагом `STC_METRICS_ENABLE_COVERAGE=ON`. Компилирует цели 
+  `metrics_registry_test` и `prometheus_exporter_test`, после чего запускает `ctest`.
+- <b>mem-test</b>: Двухэтапная проверка памяти. 
+  <i>Этап 1:</i> Сборка в `sanitizer_build` с флагом `STC_METRICS_ENABLE_SANITIZERS=ON` 
+  (AddressSanitizer, UndefinedBehaviorSanitizer) и запуск тестов. 
+  <i>Этап 2:</i> Сборка в `valgrind_build` и последовательный прогон обоих тестовых 
+  бинарных файлов через `valgrind --leak-check=full`.
+- <b>gcov-report</b>: Инкапсулирует вызов `unit-test`, затем с помощью `lcov` собирает 
+  данные покрытия, очищает их от системных заголовков и тестов, и генерирует HTML-отчет 
+  через `genhtml` в директорию `coverage_report`.
+- <b>test-all</b>: Агрегирует последовательный вызов `linter-test`, `unit-test`, 
+  `mem-test` и `gcov-report`. Предназначена для локального запуска полного цикла 
+  верификации перед коммитом.
+- <b>docs</b>: Генерация API-документации с помощью Doxygen. Завершается с ошибкой, 
+  если `Doxygen` не найден в системе.
+
+@section build_integration Интеграция в основной проект
+Для подключения `stc::metrics` к основному сервису рекомендуется использовать 
+`FetchContent`. Согласно принципу SSOT и во избежание конфликтов версий GoogleTest, 
+а также засорения графа целей основного проекта, необходимо принудительно отключать 
+сборку тестов и санитайзеров библиотеки.
+
+@code{.cmake}
+include(FetchContent)
+
+# Принудительное отключение тестов и санитайзеров библиотеки stc::metrics
+set(STC_METRICS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(STC_METRICS_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    stc_metrics
+    GIT_REPOSITORY https://path/to/stc_metrics.git
+    GIT_TAG        main
+)
+FetchContent_MakeAvailable(stc_metrics)
+
+# Линковка с бизнес-кодом (использование алиаса stc::metrics)
+target_link_libraries(my_business_target PRIVATE stc::metrics)
+@endcode
+
+@section build_install Установка и экспорт
+Библиотека поддерживает стандартный механизм установки CMake (`GNUInstallDirs`). 
+При выполнении `make install` заголовочные файлы, статическая библиотека и 
+CMake-экспортные файлы (`stc_metrics_targets.cmake`) сохраняются в стандартные 
+системные директории. Это позволяет подключать `stc::metrics` к другим проектам 
+не только через `FetchContent`, но и через `find_package(stc_metrics)`.
+*/

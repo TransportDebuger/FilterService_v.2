@@ -1,0 +1,121 @@
+/**
+@page page_metrics_integration Интеграция stc::metrics в основной проект
+
+Страница описывает процесс подключения инфраструктурной библиотеки `stc::metrics` 
+к основному сервису (`xmlfilter`) через систему сборки CMake, а также архитектурные 
+правила её инъекции в бизнес-логику. Библиотека не имеет внешних зависимостей 
+(используется только стандартная библиотека C++20), что делает процесс интеграции 
+максимально легковесным и изолированным.
+
+@section integration_cmake Подключение через CMake (FetchContent)
+Для управления зависимостями используется механизм `FetchContent`. Согласно принципу 
+SSOT и во избежание конфликтов версий фреймворка GoogleTest, а также для предотвращения 
+засорения графа целей основного проекта специализированными сборками, необходимо 
+принудительно отключить тесты, санитайзеры и генерацию покрытия на уровне кэша CMake 
+до вызова `FetchContent_MakeAvailable`.
+
+@code{.cmake}
+include(FetchContent)
+
+# ==============================================================================
+# Изоляция специализированных сборок stc::metrics
+# ==============================================================================
+# Принудительное отключение тестов и инструментов анализа для основного проекта.
+# Это гарантирует, что цели unit-test, mem-test и gcov-report не будут 
+# экспортированы в граф сборки сервиса xmlfilter.
+set(STC_METRICS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(STC_METRICS_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+set(STC_METRICS_ENABLE_COVERAGE OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    stc_metrics
+    GIT_REPOSITORY https://path/to/stc_metrics.git
+    GIT_TAG        main
+)
+FetchContent_MakeAvailable(stc_metrics)
+
+# ==============================================================================
+# Линковка с бизнес-логикой
+# ==============================================================================
+# Используется алиас stc::metrics для соблюдения соглашений о пространствах имен.
+target_link_libraries(xmlfilter_core PRIVATE stc::metrics)
+@endcode
+
+@section integration_composition_root Инъекция в Composition Root
+Создание экземпляра реестра и регистрация метрик происходят исключительно в 
+`ServiceController` (точка композиции). Бизнес-компоненты (`Master`, `Worker`, 
+`XMLProcessor`) не знают о существовании `MetricsRegistry` и получают на вход 
+только интерфейсы примитивов (`ICounter`, `IGauge`, `IHistogram`).
+
+@code{.cpp}
+#include <stc/metrics/metrics_registry.hpp>
+#include <stc/metrics/noop_metrics.hpp>
+
+class ServiceController {
+    std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
+    std::unique_ptr<Master> master_;
+
+public:
+    void Initialize(const AppConfig& config) {
+        // 1. Выбор реализации на основе конфигурации (DIP)
+        if (config.metrics_enabled) {
+            metrics_registry_ = std::make_shared<stc::metrics::MetricsRegistry>();
+        } else {
+            // NoOp-заглушка обеспечивает Zero Overhead на горячем пути
+            metrics_registry_ = std::make_shared<stc::metrics::NoOpMetricsRegistry>();
+        }
+
+        // 2. Фаза регистрации (строгая валидация, однопоточный контекст)
+        auto files_counter = metrics_registry_->RegisterCounter(
+            "xml_files_processed_total", "Total successfully processed files");
+        
+        auto active_workers = metrics_registry_->RegisterGauge(
+            "active_workers_count", "Current number of active threads");
+        
+        auto duration_hist = metrics_registry_->RegisterHistogram(
+            "xml_processing_duration_seconds", "Processing time per file",
+            {0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0});
+
+        // 3. Инъекция дескрипторов в бизнес-иерархию
+        master_ = std::make_unique<Master>(
+            files_counter, active_workers, duration_hist, /* ... other deps ... */);
+    }
+};
+@endcode
+
+@section integration_http_exposure Экспорт метрик (Pull-модель)
+Библиотека `stc::metrics` реализует Pull-модель сбора данных. Сервис не отправляет 
+метрики по сети самостоятельно. Вместо этого предоставляется HTTP-эндпоинт (обычно 
+`/metrics`), к которому обращается сервер мониторинга (Prometheus, VictoriaMetrics).
+
+@code{.cpp}
+#include <stc/metrics/prometheus_exporter.hpp>
+
+// Обработчик HTTP-запроса в сетевом слое сервиса
+void HandleMetricsEndpoint(HttpResponse& response, 
+                           const stc::metrics::IMetricsRegistry& registry) 
+{
+    // Формирование текстового снимка состояния в формате Prometheus Exposition.
+    // Префикс "xmlfilter" добавляется ко всем именам метрик для изоляции в общем неймспейсе.
+    std::string payload = stc::metrics::ExportToPrometheus(registry, "xmlfilter");
+
+    response.set_status(200);
+    response.set_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    response.set_body(std::move(payload));
+}
+@endcode
+
+@par Архитектурные ограничения и гарантии
+1. **Отсутствие глобального состояния**: Библиотека не использует синглтоны. 
+   Каждый инстанс `MetricsRegistry` полностью изолирован, что позволяет, при необходимости, 
+   запускать несколько независимых контуров метрик в рамках одного процесса.
+2. **Потокобезопасность экспорта**: Вызов `ExportToPrometheus` может происходить 
+   асинхронно относительно бизнес-потоков. Lock-free примитивы гарантируют, что 
+   чтение значений не приведет к взаимным блокировкам (deadlock) с потоками, 
+   выполняющими `Increment` или `Observe`.
+3. **Совместимость с systemd**: Поскольку управление жизненным циклом делегировано 
+   `systemd` (см. `refactoring_stage2_summary.md`), библиотека не требует явных 
+   вызовов `Flush()` при завершении работы (в отличие от асинхронного логгера). 
+   При получении `SIGTERM` потоки бизнес-логики корректно завершаются, а финальный 
+   снимок метрик будет считан сервером мониторинга при следующем плановом скрейпинге.
+*/

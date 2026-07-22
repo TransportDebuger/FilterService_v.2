@@ -1,0 +1,99 @@
+/**
+@page page_example_basic_integration Example: Базовая интеграция и Dependency Injection
+
+На данной странице демонстрируется паттерн инициализации подсистемы метрик в точке 
+композиции (Composition Root) и инъекции дескрипторов в бизнес-компоненты. 
+Архитектура `stc::metrics` категорически отвергает использование глобальных синглтонов, 
+обеспечивая 100% тестируемость бизнес-логики и гибкость конфигурации.
+
+@section example_init Инициализация в Composition Root
+Создание реестра, регистрация метрик и передача дескрипторов происходят исключительно 
+на этапе инициализации сервиса (в `ServiceController`). Бизнес-код не знает о существовании 
+конкретного реестра или формата экспорта.
+
+@code{.cpp}
+#include <stc/metrics/metrics_registry.hpp>
+#include <stc/metrics/noop_metrics.hpp>
+#include "master.hpp"
+
+class ServiceController {
+    std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
+    std::unique_ptr<Master> master_;
+
+public:
+    void Initialize(bool enable_metrics) {
+        // 1. Выбор реализации реестра (DIP)
+        if (enable_metrics) {
+            metrics_registry_ = std::make_shared<stc::metrics::MetricsRegistry>();
+        } else {
+            // Инжекция заглушки с нулевыми накладными расходами (Null Object Pattern)
+            metrics_registry_ = std::make_shared<stc::metrics::NoOpMetricsRegistry>();
+        }
+
+        // 2. Фаза регистрации (вызывается один раз при старте, однопоточный контекст)
+        auto files_processed = metrics_registry_->RegisterCounter(
+            "xml_files_processed_total", "Total number of successfully processed XML files");
+        
+        auto active_workers = metrics_registry_->RegisterGauge(
+            "active_workers_count", "Current number of active worker threads");
+        
+        auto processing_duration = metrics_registry_->RegisterHistogram(
+            "xml_processing_duration_seconds", "Time spent parsing and filtering XML",
+            {0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0});
+
+        // 3. Инъекция дескрипторов в бизнес-логику
+        master_ = std::make_unique<Master>(
+            metrics_registry_, files_processed, active_workers, processing_duration);
+    }
+};
+@endcode
+
+@section example_worker Использование в бизнес-компонентах
+Бизнес-компоненты (например, `Worker`) принимают в конструктор только интерфейсы 
+примитивов (`ICounter`, `IGauge`, `IHistogram`). Это гарантирует, что компоненты 
+зависят от абстракций, а не от деталей реализации (принцип инверсии зависимостей - DIP).
+
+@code{.cpp}
+#include <stc/metrics/imetric.hpp>
+#include <memory>
+
+class Worker {
+    std::shared_ptr<stc::metrics::ICounter> files_processed_;
+    std::shared_ptr<stc::metrics::IHistogram> processing_duration_;
+
+public:
+    // Конструктор принимает только интерфейсы примитивов
+    Worker(std::shared_ptr<stc::metrics::ICounter> counter,
+           std::shared_ptr<stc::metrics::IHistogram> histogram)
+        : files_processed_(std::move(counter))
+        , processing_duration_(std::move(histogram)) {}
+
+    void ProcessFile(const std::string& path) {
+        auto start_time = std::chrono::steady_clock::now();
+        
+        // ... бизнес-логика обработки файла ...
+        
+        auto end_time = std::chrono::steady_clock::now();
+        double duration = std::chrono::duration<double>(end_time - start_time).count();
+
+        // Lock-free инкремент и наблюдение. 
+        // Отсутствие поиска по строковым ключам гарантирует O(1) доступ.
+        files_processed_->Increment(1.0);
+        processing_duration_->Observe(duration);
+    }
+};
+@endcode
+
+@par Архитектурные гарантии
+1. **Отказ от синглтонов**: Экземпляр реестра создается явно и контролируется временем 
+   жизни `ServiceController`. Это позволяет запускать несколько изолированных инстансов 
+   метрик в рамках одного процесса (например, для юнит-тестов или специфичных подсистем).
+2. **Разделение фаз (Registration vs Collection)**: Строковые имена метрик и их описание 
+   (`help`) используются только в фазе инициализации. На «горячем пути» (hot path) 
+   бизнес-код оперирует исключительно типизированными дескрипторами (`std::shared_ptr<ICounter>`), 
+   что исключает накладные расходы на хэширование и поиск.
+3. **Тестируемость и Zero Overhead**: При передаче `NoOpMetricsRegistry` в бизнес-компоненты, 
+   вызовы `Increment()` и `Observe()` превращаются компилятором в пустые инструкции (`nop`). 
+   Это позволяет полностью отключить сбор метрик в отладочных или легковесных сборках без 
+   внесения условных ветвлений (`if (metrics_enabled)`) в исходный код бизнес-логики.
+*/

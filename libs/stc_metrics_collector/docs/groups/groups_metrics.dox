@@ -1,0 +1,18 @@
+/**
+@defgroup grp_metrics Инфраструктура сбора и экспорта метрик
+@brief Потокобезопасные lock-free примитивы и механизмы сериализации для систем мониторинга.
+@{
+    @class stc::metrics::IMetric
+    @class stc::metrics::ICounter
+    @class stc::metrics::IGauge
+    @class stc::metrics::IHistogram
+    @class stc::metrics::IExporterVisitor
+    @class stc::metrics::IMetricsRegistry
+    @class stc::metrics::MetricsRegistry
+    @class stc::metrics::AtomicCounter
+    @class stc::metrics::AtomicGauge
+    @class stc::metrics::AtomicHistogram
+    @class stc::metrics::NoOpMetricsRegistry
+    @class stc::metrics::PrometheusExporter
+@}
+*/

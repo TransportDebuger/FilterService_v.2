@@ -1,0 +1,127 @@
+/**
+@page page_example_noop_metrics Example: Полное отключение метрик с нулевыми накладными расходами
+
+Страница демонстрирует паттерн Null Object, реализованный в библиотеке `stc::metrics` 
+для полного отключения сбора телеметрии без модификации бизнес-кода. Архитектура 
+гарантирует, что при использовании `NoOpMetricsRegistry` все вызовы методов 
+`Increment`, `Set`, `Decrement` и `Observe` элиминируются компилятором на этапе 
+оптимизации, превращаясь в инструкцию `nop`.
+
+@section example_config_switch Переключение на этапе инициализации
+Выбор между активной и пустой реализацией реестра происходит единожды в точке 
+композиции (`ServiceController`) на основе флага конфигурации. Бизнес-компоненты 
+не осведомлены о том, какая именно реализация им была инжектирована.
+
+@code{.cpp}
+#include <stc/metrics/metrics_registry.hpp>
+#include <stc/metrics/noop_metrics.hpp>
+
+class ServiceController {
+    std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
+
+public:
+    void Initialize(const AppConfig& config) {
+        // Единственная точка ветвления — фаза инициализации.
+        // Бизнес-код не содержит ни одного условного оператора, связанного с метриками.
+        if (config.enable_metrics) {
+            metrics_registry_ = std::make_shared<stc::metrics::MetricsRegistry>();
+        } else {
+            // NoOpMetricsRegistry переиспользует единственные экземпляры заглушек.
+            // Методы Register* возвращают заранее созданные shared_ptr<NoOp*>.
+            metrics_registry_ = std::make_shared<stc::metrics::NoOpMetricsRegistry>();
+        }
+
+        // Регистрация метрик идентична для обеих реализаций.
+        // NoOpMetricsRegistry игнорирует параметры name, help и buckets,
+        // возвращая переиспользуемые дескрипторы без аллокаций.
+        auto counter = metrics_registry_->RegisterCounter(
+            "xml_files_processed_total", "Total processed files");
+        auto histogram = metrics_registry_->RegisterHistogram(
+            "xml_processing_duration_seconds", "Processing time",
+            {0.01, 0.1, 1.0, 5.0});
+
+        // Инъекция в бизнес-логику
+        master_ = std::make_unique<Master>(counter, histogram);
+    }
+};
+@endcode
+
+@section example_zero_overhead Гарантия нулевых накладных расходов
+Бизнес-код вызывает методы метрик идентичным образом независимо от выбранной 
+реализации. При использовании `NoOpMetricsRegistry` компилятор C++ (GCC, Clang) 
+с уровнем оптимизации `-O2` или выше полностью элиминирует вызовы пустых 
+inline-методов.
+
+@code{.cpp}
+class Worker {
+    std::shared_ptr<stc::metrics::ICounter> counter_;
+    std::shared_ptr<stc::metrics::IHistogram> histogram_;
+
+public:
+    void ProcessFile(const std::string& path) {
+        auto start = std::chrono::steady_clock::now();
+
+        // ... бизнес-логика ...
+
+        auto end = std::chrono::steady_clock::now();
+        double duration = std::chrono::duration<double>(end - start).count();
+
+        // При инжекции NoOpCounter и NoOpHistogram:
+        // - counter_->Increment(1.0)  -> inline пустой метод -> nop
+        // - histogram_->Observe(duration) -> inline пустой метод -> nop
+        // Измерение duration также будет элиминировано компилятором,
+        // так как его результат не используется ни в одной живой переменной.
+        counter_->Increment(1.0);
+        histogram_->Observe(duration);
+    }
+};
+@endcode
+
+@section example_export_safety Безопасность при экспорте
+При попытке экспорта метрик из `NoOpMetricsRegistry` функция `ExportToPrometheus` 
+возвращает пустую строку. Это происходит по двум причинам:
+1. Метод `AcceptVisitor` в `NoOpMetricsRegistry` является пустой реализацией 
+   и не вызывает ни одного метода `Visit` у экспортера.
+2. Даже если заглушки каким-либо образом попадут в `MetricsRegistry`, 
+   `dynamic_cast` к атомарным типам (`AtomicCounter`, `AtomicGauge`, 
+   `AtomicHistogram`) вернет `nullptr`, и экспортер безопасно проигнорирует 
+   такие метрики.
+
+@code{.cpp}
+#include <stc/metrics/prometheus_exporter.hpp>
+
+void HandleMetricsRequest(HttpResponse& response,
+                          const stc::metrics::IMetricsRegistry& registry) 
+{
+    std::string payload = stc::metrics::ExportToPrometheus(registry, "xmlfilter");
+    
+    // При NoOpMetricsRegistry: payload.empty() == true
+    // HTTP-ответ будет иметь пустое тело, что корректно интерпретируется
+    // Prometheus как отсутствие активных метрик для данного target.
+    response.set_status(200);
+    response.set_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    response.set_body(std::move(payload));
+}
+@endcode
+
+@par Архитектурные преимущества перед альтернативными подходами
+1. **Отсутствие препроцессорных директив (`#ifdef`)**: В отличие от подхода 
+   с макросами (`#ifdef ENABLE_METRICS`), паттерн Null Object не засоряет 
+   бизнес-код условной компиляцией. Это сохраняет читаемость, упрощает 
+   отладку и позволяет переключать метрики в runtime без пересборки бинарного файла.
+2. **Отсутствие ветвлений на «горячем пути» (`if (metrics_enabled)`)**: 
+   Проверка флага конфигурации происходит один раз при инициализации. 
+   На «горячем пути» отсутствует даже косвенное ветвление через виртуальный 
+   вызов, так как компилятор де-виртуализует (devirtualize) вызовы методов 
+   `final`-классов `NoOpCounter`, `NoOpGauge` и `NoOpHistogram` и элиминирует 
+   пустые тела методов.
+3. **Переиспользование экземпляров**: Конструктор `NoOpMetricsRegistry` 
+   инициализирует три переиспользуемых дескриптора (`noop_counter_`, 
+   `noop_gauge_`, `noop_histogram_`). Многократные вызовы `RegisterCounter` 
+   возвращают один и тот же `shared_ptr`, предотвращая аллокации памяти 
+   даже на этапе инициализации.
+4. **Полная тестируемость**: В юнит-тестах бизнес-компонентов можно 
+   инжектировать `NoOpMetricsRegistry` или `NoOpCounter` напрямую, 
+   не создавая моков (mock) через GoogleMock. Это упрощает тестовую 
+   инфраструктуру и ускоряет выполнение тестов.
+*/

@@ -1,0 +1,105 @@
+/**
+@page page_metrics_arch Архитектура библиотеки stc::metrics
+
+Библиотека `stc::metrics` спроектирована как высокопроизводительный, потокобезопасный 
+инфраструктурный слой для сбора и экспорта телеметрии. Архитектура базируется на принципах 
+Dependency Injection (DI), разделения ответственности (SRP) и инверсии зависимостей (DIP). 
+Глобальное состояние и синглтоны полностью исключены из графа зависимостей.
+
+@section arch_phases Разделение фаз: Registration vs Collection
+Жизненный цикл метрики строго разделен на две фазы, что позволяет оптимизировать 
+производительность на «горячем пути» (hot path):
+1. **Фаза регистрации (Immutable Registration):** Происходит однократно на этапе 
+   инициализации сервиса (в Composition Root). В этой фазе выполняются аллокации памяти, 
+   валидация входных данных (например, проверка сортировки бакетов гистограммы) и проверка 
+   уникальности имен. Допустимо использование тяжелых структур данных и механизмов синхронизации.
+2. **Фаза сбора (Lock-free Collection):** Бизнес-код оперирует исключительно типизированными 
+   дескрипторами (`std::shared_ptr<ICounter>` и т.д.). Все операции инкремента и наблюдения 
+   выполняются без захвата мьютексов и поиска по строковым ключам, обеспечивая `O(1)` доступ 
+   к атомарным ячейкам памяти.
+
+@section arch_visitor Паттерн Visitor и Interface Segregation
+Интерфейсы примитивов (`ICounter`, `IGauge`, `IHistogram`) намеренно не содержат методов 
+чтения значений (геттеров). Это защищает бизнес-логику от зависимости от внутреннего 
+состояния метрик и предотвращает использование счетчиков в качестве примитивов синхронизации.
+Чтение значений делегировано исключительно инфраструктурному слою (`PrometheusExporter`), 
+который реализует паттерн Visitor. Экспортер использует `dynamic_cast` для безопасного 
+приведения к конкретным атомарным реализациям и извлечения значений.
+Метаданные метрик (`name`, `help`) централизованно хранятся в `MetricsRegistry`, что 
+позволяет атомарным примитивам не нести накладных расходов на хранение строк.
+
+@section arch_memory Lock-Free гарантии и модель памяти
+Атомарные реализации (`AtomicCounter`, `AtomicGauge`, `AtomicHistogram`) используют 
+`std::memory_order_relaxed` для всех операций изменения состояния. Для монотонных счетчиков 
+и гистограмм строгая синхронизация с другими переменными памяти не требуется. Это предотвращает 
+избыточные барьеры памяти (memory barriers) и минимизирует конфликты кэш-линий (cache-line 
+bouncing) в многопроцессорных системах, обеспечивая линейное масштабирование при росте 
+числа потоков.
+
+@section arch_noop Null Object Pattern
+Для полного отключения сбора метрик (например, в отладочных сборках или легковесных инстансах) 
+предоставляется `NoOpMetricsRegistry` и набор заглушек (`NoOpCounter`, `NoOpGauge`, `NoOpHistogram`). 
+Методы заглушек являются пустыми inline-функциями, которые компилятор элиминирует на этапе 
+оптимизации, гарантируя нулевые накладные расходы (Zero Overhead) без использования 
+препроцессорных директив (`#ifdef`) или условных ветвлений в бизнес-коде.
+
+@section arch_diagram Диаграмма классов
+@dot
+digraph metrics_arch {
+    rankdir=TB;
+    splines=ortho;
+    node [shape=record, fontname="Helvetica", fontsize=10];
+    edge [fontname="Helvetica", fontsize=9];
+
+    // Interfaces
+    IMetric [label="«interface»\nIMetric"];
+    ICounter [label="«interface»\nICounter"];
+    IGauge [label="«interface»\nIGauge"];
+    IHistogram [label="«interface»\nIHistogram"];
+    IExporterVisitor [label="«interface»\nIExporterVisitor"];
+    IMetricsRegistry [label="«interface»\nIMetricsRegistry"];
+
+    // Atomic Implementations
+    AtomicCounter [label="AtomicCounter"];
+    AtomicGauge [label="AtomicGauge"];
+    AtomicHistogram [label="AtomicHistogram"];
+    MetricsRegistry [label="MetricsRegistry"];
+
+    // NoOp Implementations
+    NoOpCounter [label="NoOpCounter"];
+    NoOpGauge [label="NoOpGauge"];
+    NoOpHistogram [label="NoOpHistogram"];
+    NoOpMetricsRegistry [label="NoOpMetricsRegistry"];
+
+    // Exporter
+    PrometheusExporter [label="PrometheusExporter"];
+
+    // Layout alignment
+    {rank=same; IMetric; IExporterVisitor; IMetricsRegistry;}
+    {rank=same; ICounter; IGauge; IHistogram;}
+    {rank=same; AtomicCounter; AtomicGauge; AtomicHistogram; MetricsRegistry; PrometheusExporter;}
+    {rank=same; NoOpCounter; NoOpGauge; NoOpHistogram; NoOpMetricsRegistry;}
+
+    // Inheritance
+    ICounter -> IMetric [arrowhead=empty];
+    IGauge -> IMetric [arrowhead=empty];
+    IHistogram -> IMetric [arrowhead=empty];
+    
+    AtomicCounter -> ICounter [arrowhead=empty];
+    AtomicGauge -> IGauge [arrowhead=empty];
+    AtomicHistogram -> IHistogram [arrowhead=empty];
+    
+    NoOpCounter -> ICounter [arrowhead=empty];
+    NoOpGauge -> IGauge [arrowhead=empty];
+    NoOpHistogram -> IHistogram [arrowhead=empty];
+    
+    MetricsRegistry -> IMetricsRegistry [arrowhead=empty];
+    NoOpMetricsRegistry -> IMetricsRegistry [arrowhead=empty];
+    PrometheusExporter -> IExporterVisitor [arrowhead=empty];
+
+    // Composition / Usage
+    MetricsRegistry -> IMetric [label="stores", constraint=false, style=dashed];
+    MetricsRegistry -> IExporterVisitor [label="accepts", constraint=false, style=dashed];
+}
+@enddot
+*/

@@ -1,0 +1,76 @@
+/**
+@page page_example_prometheus_export Example: Сериализация и экспорт метрик
+
+Страница демонстрирует механизм формирования моментального снимка (snapshot) 
+состояния реестра метрик и его сериализацию в текстовый формат Prometheus 
+Exposition Format. Архитектура `stc::metrics` строго разделяет процесс сбора 
+данных и процесс их экспорта, инкапсулируя требования спецификации внутри 
+слоя сериализации.
+
+@section example_http_handler Интеграция с HTTP-сервером
+Формирование текста метрик происходит по запросу от сервера мониторинга 
+(Pull-модель). Бизнес-логика (например, `ServiceController`) предоставляет 
+HTTP-эндпоинт (обычно `/metrics`), внутри которого вызывается функция экспорта.
+
+@code{.cpp}
+#include <stc/metrics/prometheus_exporter.hpp>
+#include <string>
+
+// Имитация обработчика HTTP-запроса в бизнес-логике
+void HandleMetricsRequest(HttpResponse& response, 
+                          const stc::metrics::IMetricsRegistry& registry) 
+{
+    // Вызов свободной функции-обертки.
+    // Префикс неймспейса "xmlfilter" будет автоматически добавлен ко всем именам метрик.
+    std::string payload = stc::metrics::ExportToPrometheus(registry, "xmlfilter");
+
+    // Формирование HTTP-ответа
+    response.set_status(200);
+    response.set_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    response.set_body(std::move(payload));
+}
+@endcode
+
+@section example_output Формат вывода
+Библиотека автоматически применяет правила форматирования, требуемые спецификацией 
+Prometheus. Ниже представлен пример текста, сгенерированного на основе метрик, 
+зарегистрированных в сценарии базовой интеграции.
+
+@code{text}
+# HELP xmlfilter_xml_files_processed_total Total number of successfully processed XML files
+# TYPE xmlfilter_xml_files_processed_total counter
+xmlfilter_xml_files_processed_total 14502
+
+# HELP xmlfilter_active_workers_count Current number of active worker threads
+# TYPE xmlfilter_active_workers_count gauge
+xmlfilter_active_workers_count 8
+
+# HELP xmlfilter_xml_processing_duration_seconds Time spent parsing and filtering XML
+# TYPE xmlfilter_xml_processing_duration_seconds histogram
+xmlfilter_xml_processing_duration_seconds_bucket{le="0.01"} 120
+xmlfilter_xml_processing_duration_seconds_bucket{le="0.05"} 450
+xmlfilter_xml_processing_duration_seconds_bucket{le="0.1"} 800
+xmlfilter_xml_processing_duration_seconds_bucket{le="+Inf"} 1000
+xmlfilter_xml_processing_duration_seconds_sum 145.5
+xmlfilter_xml_processing_duration_seconds_count 1000
+@endcode
+
+@par Архитектурные гарантии и разделение ответственности
+1. **Соблюдение SRP (Single Responsibility Principle)**: Класс `PrometheusExporter` 
+   и функция `ExportToPrometheus` работают исключительно с памятью (`std::ostream` 
+   или `std::string`). Они намеренно не содержат кода для работы с HTTP, сокетами 
+   или файловыми системами. Транспортный уровень полностью делегирован бизнес-логике, 
+   что позволяет переиспользовать экспортер для записи в файл, отправки по UDP 
+   или интеграции с произвольными HTTP-фреймворками.
+2. **Автоматическая коррекция формата**: Библиотека инкапсулирует синтаксические 
+   требования Prometheus. Суффикс `_total` для счетчиков добавляется автоматически 
+   (даже если при регистрации он был упущен), а значения бакетов гистограммы 
+   преобразуются из независимых атомарных счетчиков в кумулятивные (накопительные) 
+   непосредственно на этапе сериализации, не засоряя «горячий путь» сбора данных.
+3. **Консистентность снимка**: Чтение значений из атомарных примитивов происходит 
+   в момент вызова `ExportToPrometheus`. Хотя строгая транзакционность между 
+   различными метриками не гарантируется (из-за использования `memory_order_relaxed` 
+   в ядре), каждый отдельный примитив возвращает математически корректное значение. 
+   Это полностью удовлетворяет требованиям Pull-моделей мониторинга, где допустима 
+   минимальная рассинхронизация между независимыми метриками в рамках одного скрейпинга.
+*/

@@ -1,0 +1,117 @@
+/**
+@page page_example_multithreaded_collection Example: Многопоточный сбор данных на «горячем пути»
+
+Страница демонстрирует паттерн безопасного и высокопроизводительного сбора метрик 
+из множества параллельных потоков выполнения. Архитектура `stc::metrics` гарантирует 
+отсутствие гонок данных (data race) и взаимных блокировок (deadlock) при конкурентном 
+доступе к примитивам, что критически важно для обработки потоков событий в реальном времени.
+
+@section example_worker_impl Реализация бизнес-потока
+Бизнес-компонент (`Worker`) принимает дескрипторы метрик на этапе конструирования. 
+Внутри цикла обработки событий вызываются методы `Increment` и `Observe`. 
+Обратите внимание на отсутствие каких-либо механизмов синхронизации (мьютексов, 
+атомарных циклов CAS) в бизнес-коде: вся ответственность за потокобезопасность 
+делегирована инфраструктурному слою (`AtomicCounter`, `AtomicHistogram`).
+
+@code{.cpp}
+#include <stc/metrics/imetric.hpp>
+#include <chrono>
+#include <stop_token>
+
+class Worker {
+    std::shared_ptr<stc::metrics::ICounter> files_processed_;
+    std::shared_ptr<stc::metrics::IHistogram> processing_duration_;
+
+public:
+    Worker(std::shared_ptr<stc::metrics::ICounter> counter,
+           std::shared_ptr<stc::metrics::IHistogram> histogram)
+        : files_processed_(std::move(counter))
+        , processing_duration_(std::move(histogram)) {}
+
+    // Точка входа для потока обработки. 
+    // std::stop_token обеспечивает кооперативное завершение (C++20).
+    void Run(std::stop_token stoken) {
+        while (!stoken.stop_requested()) {
+            auto start_time = std::chrono::steady_clock::now();
+            
+            // ... Имитация бизнес-логики (чтение, парсинг, фильтрация XML) ...
+            
+            auto end_time = std::chrono::steady_clock::now();
+            double duration_sec = std::chrono::duration<double>(end_time - start_time).count();
+
+            // ======================================================================
+            // «ГОРЯЧИЙ ПУТЬ» (HOT PATH)
+            // ======================================================================
+            // 1. Lock-free инкремент счетчика.
+            //    Внутри вызывается std::atomic::fetch_add с memory_order_relaxed.
+            files_processed_->Increment(1.0);
+
+            // 2. Lock-free наблюдение для гистограммы.
+            //    Внутри выполняется бинарный поиск (O(log N)) и атомарные инкременты 
+            //    бакета, общего счетчика и суммы.
+            processing_duration_->Observe(duration_sec);
+        }
+    }
+};
+@endcode
+
+@section example_thread_management Запуск и управление жизненным циклом
+Для управления пулом потоков используется `std::jthread` (стандарт C++20). 
+Это гарантирует автоматическое присоединение (join) потоков при уничтожении 
+контейнера `workers_`, предотвращая утечки ресурсов и неопределенное поведение 
+(detached threads) при graceful shutdown сервиса.
+
+@code{.cpp}
+#include <thread>
+#include <vector>
+#include <memory>
+
+class Master {
+    std::vector<std::jthread> workers_;
+    std::unique_ptr<Worker> worker_logic_;
+
+public:
+    Master(std::shared_ptr<stc::metrics::ICounter> counter,
+           std::shared_ptr<stc::metrics::IHistogram> histogram) 
+    {
+        // Логика воркера создается один раз и разделяется между потоками 
+        // (или создаются отдельные инстансы, в зависимости от бизнес-требований).
+        worker_logic_ = std::make_unique<Worker>(std::move(counter), std::move(histogram));
+    }
+
+    void StartPool(size_t thread_count) {
+        workers_.reserve(thread_count);
+        for (size_t i = 0; i < thread_count; ++i) {
+            // std::jthread автоматически передает std::stop_token в лямбду
+            workers_.emplace_back([this](std::stop_token stoken) {
+                worker_logic_->Run(stoken);
+            });
+        }
+    }
+
+    void StopPool() {
+        // Запрос на остановку всех потоков.
+        for (auto& t : workers_) {
+            t.request_stop();
+        }
+        // Деструктор std::jthread автоматически вызовет join() для каждого потока,
+        // ожидая завершения текущей итерации цикла Run().
+    }
+};
+@endcode
+
+@par Архитектурные гарантии производительности и безопасности
+1. **Отсутствие поиска по строкам (Zero Lookup)**: На «горячем пути» не происходит 
+   хэширования строк или поиска метрик в `std::unordered_map`. Дескрипторы 
+   (`std::shared_ptr<ICounter>`) разрешаются один раз при инициализации и передаются 
+   по значению (копируется указатель), что обеспечивает `O(1)` доступ к атомарным ячейкам памяти.
+2. **Минимизация конфликтов кэш-линий (Cache-Line Bouncing)**: Использование 
+   `std::memory_order_relaxed` в атомарных операциях предотвращает избыточные 
+   барьеры памяти (memory barriers). Для монотонных счетчиков и гистограмм строгая 
+   синхронизация с другими переменными состояния не требуется, что критически важно 
+   для сохранения линейного масштабирования на многопроцессорных системах (NUMA).
+3. **Безопасность прерывания (Cooperative Cancellation)**: Интеграция `std::jthread` 
+   и `std::stop_token` позволяет потоку завершить текущую операцию обработки файла 
+   и корректно записать финальные метрики перед выходом, избегая обрыва данных 
+   (torn reads) на стороне сервера мониторинга.
+*/
