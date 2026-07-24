@@ -1,0 +1,84 @@
+/**
+@page page_build_system Система сборки и верификации
+
+Система сборки библиотеки `stc::fs` базируется на CMake (минимум версии 3.20) 
+и требует компилятора с полной поддержкой стандарта C++20 (GCC 11+, Clang 13+). 
+Архитектура целей (targets) строго разделена на этапы верификации, тестирования 
+и генерации документации, обеспечивая принцип Fail-Fast при отсутствии необходимых 
+инструментов или нарушении стандартов кодирования.
+
+@section sec_verification Цели верификации и тестирования
+
+@subsection sec_linter Статический анализ и форматирование (linter-test)
+Цель @c linter-test последовательно выполняет проверку исходного кода.
+1. @c clang-format: Проверяет соответствие стилю Google. При обнаружении 
+   отклонений сборка прерывается.
+2. @c cppcheck: Выполняет статический анализ с флагом @c --error-exitcode=1. 
+   Любое предупреждение или ошибка анализатора приводят к немедленному провалу 
+   цели (Fail-Fast), что гарантирует интеграцию с CI/CD пайплайнами.
+
+@subsection sec_unit Модульное тестирование (unit-test)
+Цель @c unit-test компилирует тестовый набор с флагами покрытия кода 
+(@c --coverage) и запускает его через @c ctest. Требует наличия GoogleTest.
+
+@subsection sec_mem Анализ памяти (mem-test)
+Цель @c mem-test запускает скомпилированные тесты под управлением @c Valgrind 
+с флагами @c --leak-check=full и @c --error-exitcode=1. Цель считается 
+проваленной при обнаружении утечек памяти или некорректных операций чтения/записи.
+
+@subsection sec_coverage Отчет о покрытии (gcov-report)
+Цель @c gcov-report агрегирует данные @c .gcda и @c .gcno с помощью @c lcov и 
+генерирует интерактивный HTML-отчет через @c genhtml. Для обеспечения точности 
+метрик из отчета автоматически исключаются системные заголовки, директории 
+тестов и сторонние зависимости (паттерны исключения: @c /usr/* , @c */tests/* , 
+@c */_deps/* ).
+
+@subsection sec_aggregate Агрегированная верификация (test-all)
+Цель @c test-all последовательно вызывает @c linter-test , @c unit-test , 
+@c mem-test и @c gcov-report. Прерывание на любом из этапов предотвращает 
+выполнение последующих, экономя вычислительные ресурсы.
+
+@section sec_docs Генерация документации (docs)
+Цель @c docs инициирует генерацию данного руководства через @c Doxygen. 
+В @c CMakeLists.txt реализована строгая проверка @c find_package(Doxygen REQUIRED). 
+Если инструмент не найден в системе, конфигурация CMake прерывается с 
+диагностическим сообщением, предотвращая создание неработающих целей.
+
+@section sec_integration Интеграция через FetchContent
+
+При подключении @c stc::fs к основному проекту необходимо принудительно отключить 
+сборку тестов, санитайзеров и целей верификации библиотеки. Это предотвращает 
+конфликты версий GoogleTest, дублирование целей @c gcov-report и засорение графа 
+сборки родительского проекта.
+
+@code{.cmake}
+include(FetchContent)
+FetchContent_Declare(
+    stc_fs
+    GIT_REPOSITORY https://github.com/your-org/stc_fs.git
+    GIT_TAG        v1.0.0
+)
+
+# Принудительное отключение тестов и верификации библиотеки
+set(STC_FS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(STC_FS_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+set(STC_FS_ENABLE_COVERAGE OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(stc_fs)
+
+target_link_libraries(your_target PRIVATE stc::fs)
+@endcode
+
+@section sec_commands Базовые команды сборки
+
+@code{.bash}
+# Конфигурация с включенными тестами и покрытием (для локальной разработки)
+cmake -B build -S . -DSTC_FS_BUILD_TESTS=ON -DSTC_FS_ENABLE_COVERAGE=ON
+
+# Запуск полного цикла верификации
+cmake --build build --target test-all
+
+# Генерация документации
+cmake --build build --target docs
+@endcode
+*/

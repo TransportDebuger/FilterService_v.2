@@ -29,8 +29,7 @@ std::unique_ptr<IDirectoryMonitor> DirectoryMonitor::Create(
   if (sys_calls->StatFs(path, &stat_buf) == 0) {
     // Эвристика: сетевые и FUSE файловые системы не поддерживают inotify.
     // Магические числа захардкожены для независимости от версий
-    // <linux/magic.h>. Явное приведение к long предотвращает предупреждения
-    // компилятора о квалификаторах и знаковых/беззнаковых сравнениях.
+    // <linux/magic.h>.
     const long f_type_val = static_cast<long>(stat_buf.f_type);
 
     if (f_type_val == 0x517BL ||      // SMB_SUPER_MAGIC
@@ -49,6 +48,27 @@ std::unique_ptr<IDirectoryMonitor> DirectoryMonitor::Create(
 
   return std::make_unique<InotifyMonitor>(path, std::move(callback),
                                           std::move(sys_calls));
+}
+
+std::unique_ptr<IDirectoryMonitor> DirectoryMonitor::CreateWithStrategy(
+    MonitoringStrategy strategy, const std::string& path,
+    IDirectoryMonitor::Callback callback, std::chrono::seconds polling_interval,
+    std::shared_ptr<IFileSystemSystemCalls> sys_calls) {
+  if (strategy == MonitoringStrategy::Auto) {
+    return Create(path, std::move(callback), polling_interval, sys_calls);
+  }
+
+  if (!sys_calls) {
+    sys_calls = std::make_shared<NativeInotifySystemCalls>();
+  }
+
+  if (strategy == MonitoringStrategy::Inotify) {
+    return std::make_unique<InotifyMonitor>(path, std::move(callback),
+                                            sys_calls);
+  }
+
+  return std::make_unique<PollingMonitor>(path, std::move(callback),
+                                          polling_interval);
 }
 
 }  // namespace stc::fs

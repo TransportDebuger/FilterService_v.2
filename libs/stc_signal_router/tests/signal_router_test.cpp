@@ -329,29 +329,29 @@ TEST_F(SignalRouterTest, Destructor_RestoresMaskAndClosesFd) {
 // =====================================================================
 
 TEST(SignalRouterNativeTest, NativeSystemCalls_RealSysCalls) {
-    // Создаем реальный SignalRouter без моков.
-    // Это заставит Impl инстанцировать NativeSystemCalls.
-    stc::signals::SignalRouter router;
-    
-    std::atomic<bool> handler_called{false};
-    router.RegisterHandler(SIGUSR1, [&](int sig) {
-        handler_called = true;
-    });
-    
-    // Запуск покроет EpollCreate1 и EpollCtl
-    router.Start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(20)); // Цикл EpollWait покроется
-    
-    // Отправляем сигнал самому процессу.
-    // SignalRouter заблокировал SIGUSR1 через sigprocmask, 
-    // поэтому сигнал не убьет процесс, а будет прочитан через signalfd.
-    // Это покроет NativeSystemCalls::Read
-    kill(getpid(), SIGUSR1);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Ждем обработки и Dispatch
-    
-    router.Stop();
-    
-    EXPECT_TRUE(handler_called);
+  // Создаем реальный SignalRouter без моков.
+  // Это заставит Impl инстанцировать NativeSystemCalls.
+  stc::signals::SignalRouter router;
+
+  std::atomic<bool> handler_called{false};
+  router.RegisterHandler(SIGUSR1, [&](int sig) { handler_called = true; });
+
+  // Запуск покроет EpollCreate1 и EpollCtl
+  router.Start();
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(20));  // Цикл EpollWait покроется
+
+  // Отправляем сигнал самому процессу.
+  // SignalRouter заблокировал SIGUSR1 через sigprocmask,
+  // поэтому сигнал не убьет процесс, а будет прочитан через signalfd.
+  // Это покроет NativeSystemCalls::Read
+  kill(getpid(), SIGUSR1);
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(50));  // Ждем обработки и Dispatch
+
+  router.Stop();
+
+  EXPECT_TRUE(handler_called);
 }
 
 // =====================================================================
@@ -359,14 +359,15 @@ TEST(SignalRouterNativeTest, NativeSystemCalls_RealSysCalls) {
 // =====================================================================
 
 TEST_F(SignalRouterTest, RegisterHandler_FailsOnSignalfdReconfigure) {
-    MockSystemCalls* mock_ptr = mock_sys_.get();
-    SignalRouter router(std::move(mock_sys_));
-    
-    EXPECT_CALL(*mock_ptr, Sigprocmask(SIG_BLOCK, _, nullptr)).WillOnce(Return(0));
-    EXPECT_CALL(*mock_ptr, Signalfd(3, _, _)).WillOnce(Return(-1));
-    
-    // РАЗРЕШАЕМ вызов Sigprocmask(2, ...) из деструктора (SIG_SETMASK == 2)
-    EXPECT_CALL(*mock_ptr, Sigprocmask(2, _, nullptr)).WillRepeatedly(Return(0));
-    
-    EXPECT_THROW(router.RegisterHandler(SIGUSR1, [](int){}), std::system_error);
+  MockSystemCalls* mock_ptr = mock_sys_.get();
+  SignalRouter router(std::move(mock_sys_));
+
+  EXPECT_CALL(*mock_ptr, Sigprocmask(SIG_BLOCK, _, nullptr))
+      .WillOnce(Return(0));
+  EXPECT_CALL(*mock_ptr, Signalfd(3, _, _)).WillOnce(Return(-1));
+
+  // РАЗРЕШАЕМ вызов Sigprocmask(2, ...) из деструктора (SIG_SETMASK == 2)
+  EXPECT_CALL(*mock_ptr, Sigprocmask(2, _, nullptr)).WillRepeatedly(Return(0));
+
+  EXPECT_THROW(router.RegisterHandler(SIGUSR1, [](int) {}), std::system_error);
 }

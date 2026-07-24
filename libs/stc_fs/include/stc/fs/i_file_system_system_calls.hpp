@@ -59,18 +59,19 @@ class IFileSystemSystemCalls {
   virtual int RemoveWatch(int fd, int wd) = 0;
 
   /**
-  @brief Закрывает файловый дескриптор (аналог close).
-  @param[in] fd Файловый дескриптор.
-  @return int 0 при успехе, -1 при ошибке.
-  */
+    @brief Закрывает файловый дескриптор механизма мониторинга.
+    @param[in] fd Дескриптор, ранее полученный от Init().
+    @return int 0 при успешном выполнении или -1 при ошибке.
+    */
   virtual int Close(int fd) = 0;
 
   /**
-  @brief Получает информацию о файловой системе (аналог statfs).
-  @param[in] path Путь для получения информации.
-  @param[out] buf Указатель на структуру statfs.
-  @return int 0 при успехе, -1 при ошибке.
-  */
+    @brief Получает информацию о файловой системе для указанного пути.
+    @param[in] path Путь к файлу или директории внутри целевой файловой системы.
+    @param[out] buf Указатель на структуру для приема метаданных файловой
+    системы.
+    @return int 0 при успешном выполнении или -1 при ошибке.
+    */
   virtual int StatFs(const std::string& path, struct statfs* buf) = 0;
 };
 

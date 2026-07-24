@@ -29,81 +29,79 @@ namespace stc::signals {
  * @brief Нативная реализация ISystemCalls, делегирующая вызовы ядру Linux.
  */
 class NativeSystemCalls final : public ISystemCalls {
-public:
-    /**
-    @brief Изменяет или возвращает маску сигналов текущего потока.
-    @param[in] how Флаг операции (SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK).
-    @param[in] set Указатель на набор сигналов.
-    @param[out] oldset Указатель для сохранения предыдущей маски.
-    @return int 0 при успехе, -1 при ошибке (с установкой errno).
-    */
-    int Sigprocmask(int how, const sigset_t* set, sigset_t* oldset) override {
-        return pthread_sigmask(how, set, oldset);
-    }
-    
-    /**
-    @brief Создает или обновляет файловый дескриптор для приема сигналов.
-    @param[in] fd Существующий файловый дескриптор или -1 для создания нового.
-    @param[in] mask Маска сигналов для отслеживания.
-    @param[in] flags Флаги (SFD_CLOEXEC, SFD_NONBLOCK).
-    @return int Файловый дескриптор (>= 0) при успехе, -1 при ошибке.
-    */
-    int Signalfd(int fd, const sigset_t* mask, int flags) override {
-        return signalfd(fd, mask, flags);
-    }
-    
-    /**
-    @brief Создает экземпляр epoll.
-    @param[in] flags Флаги создания (EPOLL_CLOEXEC).
-    @return int Файловый дескриптор epoll (>= 0) при успехе, -1 при ошибке.
-    */
-    int EpollCreate1(int flags) override { 
-        return epoll_create1(flags); 
-    }
-    
-    /**
-    @brief Управляет интересующими событиями для файлового дескриптора в epoll.
-    @param[in] epfd Файловый дескриптор epoll.
-    @param[in] op Операция (EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL).
-    @param[in] fd Целевой файловый дескриптор.
-    @param[in] event Указатель на структуру события.
-    @return int 0 при успехе, -1 при ошибке.
-    */
-    int EpollCtl(int epfd, int op, int fd, struct epoll_event* event) override {
-        return epoll_ctl(epfd, op, fd, event);
-    }
-    
-    /**
-    @brief Ожидает события на экземпляре epoll.
-    @param[in] epfd Файловый дескриптор epoll.
-    @param[out] events Массив для приема произошедших событий.
-    @param[in] maxevents Максимальное количество возвращаемых событий.
-    @param[in] timeout Таймаут в миллисекундах (-1 для бесконечного ожидания).
-    @return int Количество обработанных событий (>= 0), -1 при ошибке или прерывании.
-    */
-    int EpollWait(int epfd, struct epoll_event* events, int maxevents, int timeout) override {
-        return epoll_wait(epfd, events, maxevents, timeout);
-    }
-    
-    /**
-    @brief Читает данные из файлового дескриптора.
-    @param[in] fd Файловый дескриптор.
-    @param[out] buf Буфер для чтения.
-    @param[in] count Максимальное количество байт для чтения.
-    @return ssize_t Количество прочитанных байт (>= 0), -1 при ошибке.
-    */
-    ssize_t Read(int fd, void* buf, size_t count) override {
-        return read(fd, buf, count);
-    }
-    
-    /**
-    @brief Закрывает файловый дескриптор.
-    @param[in] fd Файловый дескриптор.
-    @return int 0 при успехе, -1 при ошибке.
-    */
-    int Close(int fd) override { 
-        return close(fd); 
-    }
+ public:
+  /**
+  @brief Изменяет или возвращает маску сигналов текущего потока.
+  @param[in] how Флаг операции (SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK).
+  @param[in] set Указатель на набор сигналов.
+  @param[out] oldset Указатель для сохранения предыдущей маски.
+  @return int 0 при успехе, -1 при ошибке (с установкой errno).
+  */
+  int Sigprocmask(int how, const sigset_t* set, sigset_t* oldset) override {
+    return pthread_sigmask(how, set, oldset);
+  }
+
+  /**
+  @brief Создает или обновляет файловый дескриптор для приема сигналов.
+  @param[in] fd Существующий файловый дескриптор или -1 для создания нового.
+  @param[in] mask Маска сигналов для отслеживания.
+  @param[in] flags Флаги (SFD_CLOEXEC, SFD_NONBLOCK).
+  @return int Файловый дескриптор (>= 0) при успехе, -1 при ошибке.
+  */
+  int Signalfd(int fd, const sigset_t* mask, int flags) override {
+    return signalfd(fd, mask, flags);
+  }
+
+  /**
+  @brief Создает экземпляр epoll.
+  @param[in] flags Флаги создания (EPOLL_CLOEXEC).
+  @return int Файловый дескриптор epoll (>= 0) при успехе, -1 при ошибке.
+  */
+  int EpollCreate1(int flags) override { return epoll_create1(flags); }
+
+  /**
+  @brief Управляет интересующими событиями для файлового дескриптора в epoll.
+  @param[in] epfd Файловый дескриптор epoll.
+  @param[in] op Операция (EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL).
+  @param[in] fd Целевой файловый дескриптор.
+  @param[in] event Указатель на структуру события.
+  @return int 0 при успехе, -1 при ошибке.
+  */
+  int EpollCtl(int epfd, int op, int fd, struct epoll_event* event) override {
+    return epoll_ctl(epfd, op, fd, event);
+  }
+
+  /**
+  @brief Ожидает события на экземпляре epoll.
+  @param[in] epfd Файловый дескриптор epoll.
+  @param[out] events Массив для приема произошедших событий.
+  @param[in] maxevents Максимальное количество возвращаемых событий.
+  @param[in] timeout Таймаут в миллисекундах (-1 для бесконечного ожидания).
+  @return int Количество обработанных событий (>= 0), -1 при ошибке или
+  прерывании.
+  */
+  int EpollWait(int epfd, struct epoll_event* events, int maxevents,
+                int timeout) override {
+    return epoll_wait(epfd, events, maxevents, timeout);
+  }
+
+  /**
+  @brief Читает данные из файлового дескриптора.
+  @param[in] fd Файловый дескриптор.
+  @param[out] buf Буфер для чтения.
+  @param[in] count Максимальное количество байт для чтения.
+  @return ssize_t Количество прочитанных байт (>= 0), -1 при ошибке.
+  */
+  ssize_t Read(int fd, void* buf, size_t count) override {
+    return read(fd, buf, count);
+  }
+
+  /**
+  @brief Закрывает файловый дескриптор.
+  @param[in] fd Файловый дескриптор.
+  @return int 0 при успехе, -1 при ошибке.
+  */
+  int Close(int fd) override { return close(fd); }
 };
 
 /**
@@ -112,15 +110,16 @@ public:
 */
 class SignalRouter::Impl {
  public:
-
   /**
-    @brief Конструирует скрытую реализацию маршрутизатора и инициализирует системные ресурсы.
-    @param[in] sys_calls Указатель на интерфейс системных вызовов. Если равен nullptr, автоматически инстанцируется NativeSystemCalls.
-    @throw std::system_error При ошибке получения исходной маски сигналов или создания файлового дескриптора signalfd.
+    @brief Конструирует скрытую реализацию маршрутизатора и инициализирует
+    системные ресурсы.
+    @param[in] sys_calls Указатель на интерфейс системных вызовов. Если равен
+    nullptr, автоматически инстанцируется NativeSystemCalls.
+    @throw std::system_error При ошибке получения исходной маски сигналов или
+    создания файлового дескриптора signalfd.
     */
   explicit Impl(std::unique_ptr<ISystemCalls> sys_calls)
       : sys_(std::move(sys_calls)) {
-
     if (!sys_) {
       sys_ = std::make_unique<NativeSystemCalls>();
     }
@@ -135,8 +134,8 @@ class SignalRouter::Impl {
   }
 
   /**
-    @brief Деструктор скрытой реализации. 
-    Гарантирует остановку фонового потока, закрытие файловых дескрипторов 
+    @brief Деструктор скрытой реализации.
+    Гарантирует остановку фонового потока, закрытие файловых дескрипторов
     и восстановление исходной маски сигналов потока.
     */
   ~Impl() {
@@ -146,11 +145,15 @@ class SignalRouter::Impl {
   }
 
   /**
-    @brief Регистрирует обработчик во внутреннем реестре и обновляет системную маску сигналов.
+    @brief Регистрирует обработчик во внутреннем реестре и обновляет системную
+    маску сигналов.
     @param[in] signum Номер сигнала. Валидация выполняется до захвата мьютекса.
-    @param[in] handler Функция-обработчик, сохраняемая в вектор callback-функций.
-    @throw std::invalid_argument Если signum недопустим (SIGKILL, SIGSTOP, <= 0, >= NSIG).
-    @throw std::system_error Если системные вызовы sigprocmask или signalfd в UpdateMask() завершились с ошибкой.
+    @param[in] handler Функция-обработчик, сохраняемая в вектор
+    callback-функций.
+    @throw std::invalid_argument Если signum недопустим (SIGKILL, SIGSTOP, <= 0,
+    >= NSIG).
+    @throw std::system_error Если системные вызовы sigprocmask или signalfd в
+    UpdateMask() завершились с ошибкой.
     */
   void RegisterHandler(int signum, Handler handler) {
     if (signum <= 0 || signum >= NSIG || signum == SIGKILL ||
@@ -166,9 +169,11 @@ class SignalRouter::Impl {
   }
 
   /**
-    @brief Удаляет все зарегистрированные обработчики для указанного сигнала из внутреннего реестра.
+    @brief Удаляет все зарегистрированные обработчики для указанного сигнала из
+    внутреннего реестра.
     @param[in] signum Номер сигнала. Валидация выполняется до захвата мьютекса.
-    @throw std::invalid_argument Если signum недопустим (SIGKILL, SIGSTOP, <= 0, >= NSIG).
+    @throw std::invalid_argument Если signum недопустим (SIGKILL, SIGSTOP, <= 0,
+    >= NSIG).
     */
   void UnregisterHandler(int signum) {
     if (signum <= 0 || signum >= NSIG || signum == SIGKILL ||
@@ -181,7 +186,8 @@ class SignalRouter::Impl {
 
   /**
     @brief Запускает фоновый поток мониторинга событий epoll.
-    @throw std::runtime_error Если фоновый поток уже запущен (находится в состоянии joinable).
+    @throw std::runtime_error Если фоновый поток уже запущен (находится в
+    состоянии joinable).
     */
   void Start() {
     if (worker_thread_.joinable()) {
@@ -192,8 +198,10 @@ class SignalRouter::Impl {
   }
 
   /**
-    @brief Останавливает фоновый поток мониторинга событий и блокирует вызывающий поток до его завершения.
-    @note Метод идемпотентен: повторные вызовы для уже остановленного маршрутизатора безопасны.
+    @brief Останавливает фоновый поток мониторинга событий и блокирует
+    вызывающий поток до его завершения.
+    @note Метод идемпотентен: повторные вызовы для уже остановленного
+    маршрутизатора безопасны.
     */
   void Stop() noexcept {
     if (worker_thread_.joinable()) {
@@ -203,16 +211,17 @@ class SignalRouter::Impl {
   }
 
   /**
-    @brief Проверяет, находится ли фоновый поток мониторинга событий в активном состоянии.
+    @brief Проверяет, находится ли фоновый поток мониторинга событий в активном
+    состоянии.
     @return true Если поток запущен и еще не присоединен.
     */
   bool IsRunning() const noexcept { return worker_thread_.joinable(); }
 
  private:
-
   /**
     @private
-    @brief Инициализирует файловый дескриптор signalfd с начальными флагами и пустой маской.
+    @brief Инициализирует файловый дескриптор signalfd с начальными флагами и
+    пустой маской.
     @throw std::system_error Если системный вызов signalfd завершился с ошибкой.
     */
   void InitSignalFd() {
@@ -225,8 +234,10 @@ class SignalRouter::Impl {
 
   /**
     @private
-    @brief Синхронизирует маску сигналов потока с внутренним состоянием и переконфигурирует файловый дескриптор signalfd.
-    @throw std::system_error Если системный вызов sigprocmask или signalfd завершился с ошибкой.
+    @brief Синхронизирует маску сигналов потока с внутренним состоянием и
+    переконфигурирует файловый дескриптор signalfd.
+    @throw std::system_error Если системный вызов sigprocmask или signalfd
+    завершился с ошибкой.
     */
   void UpdateMask() {
     if (sys_->Sigprocmask(SIG_BLOCK, &blocked_mask_, nullptr) == -1) {
@@ -256,8 +267,7 @@ class SignalRouter::Impl {
 
     struct epoll_event events[10];
     while (!stoken.stop_requested()) {
-      int nfds = sys_->EpollWait(epoll_fd, events, 10,
-                                 50);
+      int nfds = sys_->EpollWait(epoll_fd, events, 10, 50);
       if (nfds == -1 && errno == EINTR) continue;
 
       for (int i = 0; i < nfds; ++i) {
@@ -274,7 +284,8 @@ class SignalRouter::Impl {
 
   /**
     @private
-    @brief Читает сигнал из дескриптора signalfd и диспетчеризирует зарегистрированные обработчики.
+    @brief Читает сигнал из дескриптора signalfd и диспетчеризирует
+    зарегистрированные обработчики.
     */
   void Dispatch(int signum) {
     std::vector<Handler> local_handlers;
@@ -289,26 +300,33 @@ class SignalRouter::Impl {
     }
   }
 
-  /// @private Указатель на интерфейс системных вызовов. Обеспечивает инъекцию зависимостей (DIP) и изоляцию от POSIX API.
-    std::unique_ptr<ISystemCalls> sys_;
+  /// @private Указатель на интерфейс системных вызовов. Обеспечивает инъекцию
+  /// зависимостей (DIP) и изоляцию от POSIX API.
+  std::unique_ptr<ISystemCalls> sys_;
 
-    /// @private Реестр зарегистрированных пользовательских обработчиков, сгруппированных по номеру сигнала.
-    std::unordered_map<int, std::vector<Handler>> handlers_;
+  /// @private Реестр зарегистрированных пользовательских обработчиков,
+  /// сгруппированных по номеру сигнала.
+  std::unordered_map<int, std::vector<Handler>> handlers_;
 
-    /// @private Мьютекс для защиты внутреннего реестра обработчиков и маски сигналов от гонок данных (race conditions).
-    std::mutex mutex_;
+  /// @private Мьютекс для защиты внутреннего реестра обработчиков и маски
+  /// сигналов от гонок данных (race conditions).
+  std::mutex mutex_;
 
-    /// @private Фоновый поток (C++20), выполняющий цикл epoll_wait и делегирующий чтение в Dispatch().
-    std::jthread worker_thread_;
+  /// @private Фоновый поток (C++20), выполняющий цикл epoll_wait и делегирующий
+  /// чтение в Dispatch().
+  std::jthread worker_thread_;
 
-    /// @private Файловый дескриптор signalfd, используемый для чтения структур signalfd_siginfo из ядра.
-    int signal_fd_ = -1;
+  /// @private Файловый дескриптор signalfd, используемый для чтения структур
+  /// signalfd_siginfo из ядра.
+  int signal_fd_ = -1;
 
-    /// @private Маска сигналов, сохраненная на момент конструирования. Гарантированно восстанавливается в деструкторе (RAII).
-    sigset_t original_mask_;
+  /// @private Маска сигналов, сохраненная на момент конструирования.
+  /// Гарантированно восстанавливается в деструкторе (RAII).
+  sigset_t original_mask_;
 
-    /// @private Текущая маска сигналов, заблокированных данным экземпляром маршрутизатора и переданных в signalfd.
-    sigset_t blocked_mask_{};
+  /// @private Текущая маска сигналов, заблокированных данным экземпляром
+  /// маршрутизатора и переданных в signalfd.
+  sigset_t blocked_mask_{};
 };
 
 // === SignalRouter Forwarding ===

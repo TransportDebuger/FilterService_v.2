@@ -1,0 +1,102 @@
+/**
+@page page_architecture Архитектура stc::fs
+
+Библиотека `stc::fs` спроектирована с упором на изоляцию системно-зависимого кода, 
+тестируемость и отказоустойчивость при работе с разнородными файловыми системами.
+
+@section sec_patterns Паттерны проектирования
+
+1. @b Стратегия (Strategy): Интерфейс stc::fs::IDirectoryMonitor определяет контракт 
+   мониторинга, который реализуется двумя конкретными стратегиями:
+   - stc::fs::InotifyMonitor: Событийная модель на базе подсистемы ядра Linux inotify. 
+     Обеспечивает мгновенную реакцию и нулевую нагрузку на CPU. Применима исключительно 
+     для локальных файловых систем (ext4, xfs, btrfs).
+   - stc::fs::PollingMonitor: Опросная модель на базе std::filesystem::directory_iterator. 
+     Формирует снимки состояния директории и вычисляет дельту. Применима для любых ФС, 
+     но создает нагрузку на I/O подсистему.
+
+2. @b Фабричный метод (Factory Method): Класс stc::fs::DirectoryMonitor инкапсулирует 
+   логику инстанцирования стратегий, скрывая от бизнес-логики необходимость ручного 
+   выбора механизма мониторинга.
+
+3. @b Инверсия зависимостей (DIP): Интерфейс stc::fs::IFileSystemSystemCalls абстрагирует 
+   прямые вызовы ядра (inotify_init1, statfs). Это позволяет внедрять Mock-объекты в 
+   конструкторы мониторов, обеспечивая 100% покрытие unit-тестами без создания реальных 
+   файлов на диске или эмуляции сетевых сбоев.
+
+@section sec_heuristic Эвристика автоматического выбора стратегии
+
+Фабрика stc::fs::DirectoryMonitor::Create использует системный вызов statfs для чтения 
+магического числа типа файловой системы (поле f_type структуры statfs). 
+
+@par Обоснование решения:
+Сетевые (CIFS/SMB, NFS) и FUSE-файловые системы не поддерживают или некорректно 
+проксируют события inotify. Попытка использовать событийную стратегию на таких ресурсах 
+приводит к «немому» зависанию монитора. Эвристика на уровне фабрики предотвращает эту 
+ошибку конфигурации на этапе инициализации.
+
+@par Алгоритм:
+Если f_type соответствует одному из следующих значений, автоматически инстанцируется 
+stc::fs::PollingMonitor:
+- CIFS_MAGIC_NUMBER (0xFF534D42)
+- SMB2_SUPER_MAGIC (0xFE534D42)
+- NFS_SUPER_MAGIC (0x6969)
+- FUSE_SUPER_MAGIC (0x65735546)
+
+Во всех остальных случаях создается stc::fs::InotifyMonitor.
+
+@section sec_threading Многопоточность и изоляция исключений
+
+1. @b Кооперативная остановка: Фоновые потоки создаются через std::jthread (C++20) 
+   с передачей std::stop_token. Это гарантирует, что поток не будет прерван принудительно 
+   (как при использовании pthread_cancel), а сможет корректно завершить текущую итерацию 
+   чтения/опроса и освободить ресурсы. Деструктор монитора блокирует вызывающий поток 
+   до полного завершения фонового (join), обеспечивая строгую семантику RAII.
+
+2. @b Изоляция исключений (Exception Containment): Фоновый поток не имеет права 
+   выбрасывать исключения за свои границы, так как это приведет к вызову std::terminate 
+   и аварийному завершению процесса. Операции обхода директории (особенно на сетевых 
+   ресурсах) могут генерировать std::filesystem::filesystem_error при обрыве соединения. 
+   Все исключения перехватываются на границе потока, сохраняются в std::exception_ptr 
+   и могут быть безопасно извлечены в основном потоке через метод GetException().
+
+@section sec_diagram Диаграмма классов
+
+@dot
+digraph stc_fs_arch {
+    rankdir=BT;
+    splines=ortho;
+    nodesep=0.8;
+    ranksep=1.2;
+    node [shape=record, fontname="Helvetica", fontsize=10];
+
+    // Interfaces
+    IDirMon [label="«interface»\nIDirectoryMonitor|+ Start()\l+ Stop()\l"];
+    ISysCalls [label="«interface»\nIFileSystemSystemCalls|+ Init()\l+ StatFs()\l"];
+
+    // Factory
+    Factory [label="DirectoryMonitor|+ Create()\l"];
+
+    // Strategies
+    Inotify [label="InotifyMonitor|- Run()\l"];
+    Polling [label="PollingMonitor|- Run()\l"];
+
+    // Implementations
+    NativeSys [label="NativeInotifySystemCalls"];
+
+    // Inheritance
+    Inotify -> IDirMon [arrowhead=empty];
+    Polling -> IDirMon [arrowhead=empty];
+    NativeSys -> ISysCalls [arrowhead=empty];
+
+    // Dependencies
+    Factory -> IDirMon [style=dashed, label="creates", constraint=false];
+    Inotify -> ISysCalls [style=dashed, label="delegates", constraint=false];
+    Polling -> ISysCalls [style=dashed, label="delegates", constraint=false];
+
+    // Alignment
+    {rank=same; Inotify; Polling;}
+    {rank=same; IDirMon; ISysCalls;}
+}
+@enddot
+*/

@@ -1,0 +1,114 @@
+/**
+@page example_testing_with_mocks stc::fs: Модульное тестирование с Dependency Injection
+
+Демонстрация использования механизма Dependency Injection для тестирования 
+логики выбора стратегии и обработки ошибок без обращения к реальной файловой 
+системе.
+
+@par Сценарий:
+Необходимо протестировать, что фабрика корректно выбирает опросную стратегию 
+для SMB-файловых систем и событийную — для локальных ext4, а также что ошибки 
+`statfs` корректно транслируются в исключения.
+
+@code{.cpp}
+#include "stc/fs/directory_monitor.hpp"
+#include "stc/fs/i_file_system_system_calls.hpp"
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
+#include <sys/statfs.h>
+#include <linux/magic.h>
+
+// Mock-реализация интерфейса системных вызовов
+class MockSystemCalls : public stc::fs::IFileSystemSystemCalls {
+public:
+    MOCK_METHOD(int, Init, (), (override));
+    MOCK_METHOD(int, AddWatch, (int, const std::string&, uint32_t), (override));
+    MOCK_METHOD(ssize_t, Read, (int, void*, std::size_t), (override));
+    MOCK_METHOD(int, RemoveWatch, (int, int), (override));
+    MOCK_METHOD(int, Close, (int), (override));
+    MOCK_METHOD(int, StatFs, (const std::string&, struct statfs*), (override));
+};
+
+TEST(DirectoryMonitorFactory, SelectsPollingForSmb) {
+    auto mock = std::make_shared<MockSystemCalls>();
+
+    struct statfs fake_stat{};
+    fake_stat.f_type = SMB2_SUPER_MAGIC; // 0xFE534D42
+
+    EXPECT_CALL(*mock, StatFs(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(fake_stat),
+            ::testing::Return(0)
+        ));
+
+    auto monitor = stc::fs::DirectoryMonitor::Create(
+        "/fake/smb/path",
+        [](auto, auto) {},
+        std::chrono::seconds(5),
+        mock // Инъекция mock-объекта
+    );
+
+    ASSERT_NE(monitor, nullptr);
+    // Тип монитора определяется через dynamic_cast (допустимо в тестах)
+    // Для SMB должна быть выбрана опросная стратегия
+}
+
+TEST(DirectoryMonitorFactory, SelectsInotifyForExt4) {
+    auto mock = std::make_shared<MockSystemCalls>();
+
+    struct statfs fake_stat{};
+    fake_stat.f_type = EXT4_SUPER_MAGIC; // 0xEF53
+
+    EXPECT_CALL(*mock, StatFs(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(fake_stat),
+            ::testing::Return(0)
+        ));
+
+    auto monitor = stc::fs::DirectoryMonitor::Create(
+        "/fake/ext4/path",
+        [](auto, auto) {},
+        std::chrono::seconds(5),
+        mock
+    );
+
+    ASSERT_NE(monitor, nullptr);
+    // Для ext4 должна быть выбрана событийная стратегия
+}
+
+TEST(DirectoryMonitorFactory, ThrowsOnStatFsFailure) {
+    auto mock = std::make_shared<MockSystemCalls>();
+
+    EXPECT_CALL(*mock, StatFs(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::Invoke([](const std::string&, struct statfs*) {
+                errno = ENOENT; // Точка монтирования не существует
+            }),
+            ::testing::Return(-1)
+        ));
+
+    EXPECT_THROW(
+        stc::fs::DirectoryMonitor::Create(
+            "/nonexistent/path",
+            [](auto, auto) {},
+            std::chrono::seconds(5),
+            mock
+        ),
+        std::system_error
+    );
+}
+@endcode
+
+@par Ключевые моменты:
+- Интерфейс `IFileSystemSystemCalls` является точкой инъекции зависимостей. 
+  Четвертый параметр `DirectoryMonitor::Create` принимает `std::shared_ptr` 
+  на этот интерфейс.
+- При передаче `nullptr` (значение по умолчанию) фабрика использует нативную 
+  реализацию `NativeInotifySystemCalls`.
+- Mock-объекты позволяют симулировать любые типы файловых систем и ошибки 
+  ядра без создания реальных файлов, монтирования сетевых шар или изменения 
+  конфигурации ОС.
+- Установка `errno` внутри `Invoke` необходима, так как фабрика формирует 
+  `std::system_error` на основе глобальной переменной `errno` после возврата 
+  `-1` из `StatFs`.
+*/

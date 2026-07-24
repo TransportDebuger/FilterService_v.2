@@ -1,0 +1,84 @@
+/**
+@page example_error_handling stc::fs: Обработка ошибок и отказоустойчивость
+
+Демонстрация перехвата исключений на этапах создания и запуска монитора, 
+а также стратегии восстановления при сбоях файловой системы.
+
+@par Сценарий:
+Приложение работает с сетевой шарой (SMB/CIFS), которая может быть 
+временно недоступна. Необходимо корректно обработать ошибки монтирования 
+и инициализации, не допуская аварийного завершения процесса.
+
+@code{.cpp}
+#include "stc/fs/directory_monitor.hpp"
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+void on_file_event(stc::fs::IDirectoryMonitor::Event event,
+                   const std::string& path) {
+    // Обработка событий (должна быть потокобезопасной)
+    std::cout << "Event on: " << path << "\n";
+}
+
+bool try_start_monitoring(const std::string& path,
+                          int max_retries = 3) {
+    for (int attempt = 1; attempt <= max_retries; ++attempt) {
+        try {
+            auto monitor = stc::fs::DirectoryMonitor::Create(
+                path,
+                on_file_event,
+                std::chrono::seconds(10) // Больший интервал для сетевой ФС
+            );
+
+            monitor->Start();
+            std::cout << "Monitoring active (attempt " << attempt << ")\n";
+
+            // Цикл обработки до получения сигнала остановки
+            std::this_thread::sleep_for(std::chrono::hours(1));
+
+            monitor->Stop();
+            return true; // Штатное завершение
+
+        } catch (const std::system_error& e) {
+            // Ошибка системного вызова (statfs, inotify_init1 и др.)
+            std::cerr << "Attempt " << attempt
+                      << " failed: " << e.what()
+                      << " (errno: " << e.code().value() << ")\n";
+        } catch (const std::runtime_error& e) {
+            // Путь недоступен или не является директорией
+            std::cerr << "Attempt " << attempt
+                      << " failed: " << e.what() << "\n";
+        }
+
+        if (attempt < max_retries) {
+            std::cerr << "Retrying in 30 seconds...\n";
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+        }
+    }
+
+    std::cerr << "All retry attempts exhausted.\n";
+    return false;
+}
+
+int main() {
+    const std::string smb_path = "/mnt/remote_share/incoming";
+
+    if (!try_start_monitoring(smb_path)) {
+        return 1; // Критический сбой, эскалация на уровень systemd
+    }
+
+    return 0;
+}
+@endcode
+
+@par Ключевые моменты:
+- `DirectoryMonitor::Create` выбрасывает `std::system_error`, если системный вызов 
+  `statfs` завершается с ошибкой (например, точка монтирования не существует — `ENOENT`).
+- `Start()` выбрасывает `std::system_error` при исчерпании системных лимитов 
+  (например, `EMFILE` — лимит файловых дескрипторов, `ENOSPC` — лимит inotify watches).
+- Исключения содержат код ошибки (`e.code()`), что позволяет бизнес-логике 
+  дифференцировать типы сбоев и принимать решения о восстановлении.
+- Повторное создание монитора после ошибки безопасно: предыдущий объект уничтожается 
+  через RAII, освобождая все частично выделенные ресурсы.
+*/
