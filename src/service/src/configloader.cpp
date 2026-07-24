@@ -25,7 +25,10 @@
 #include <sstream>
 
 nlohmann::json ConfigLoader::loadFromFile(const std::string &filename) {
-  lastLoadedFile = filename;
+  if (filename.empty()) {
+    throw std::runtime_error("ConfigLoader: no file specified for load");
+  }
+  _lastLoadedFile = filename;
   return readFileContents(filename);
 }
 
@@ -36,9 +39,9 @@ nlohmann::json ConfigLoader::reload(const std::string &currentFile) {
   return readFileContents(currentFile);
 }
 
-std::string ConfigLoader::getLastLoadedFile() const { return lastLoadedFile; }
+std::string ConfigLoader::getLastLoadedFile() const { return _lastLoadedFile; }
 
-bool ConfigLoader::hasLoadedFile() const { return !lastLoadedFile.empty(); }
+bool ConfigLoader::hasLoadedFile() const { return !_lastLoadedFile.empty(); }
 
 nlohmann::json ConfigLoader::readFileContents(
     const std::string &filename) const {

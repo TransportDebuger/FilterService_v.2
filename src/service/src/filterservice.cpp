@@ -1,16 +1,12 @@
 /**
- * \file filterservice.cpp
- * \author Artem Ulyanov
- * \version 1
- * \date March, 2025
- * \brief Основной файл проекта filter_service.
- * \details Основной файл проекта filter_service. Описывает функцию основной
- * точки входа в программу.
- */
-
+@file filterservice.cpp
+@brief Основная точка входа в программу.
+@version 2.0.0
+@date 2026-07-17
+*/
 #include "../include/service_controller.hpp"
 
 int main(int argc, char **argv) {
-  ServiceController controller;
-  return controller.run(argc, argv);
+    stc::ServiceController controller;
+    return controller.Run(argc, argv);
 }

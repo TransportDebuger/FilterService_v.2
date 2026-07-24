@@ -1,329 +1,264 @@
 /**
- * @file service_controller.cpp
- * @brief Реализация методов ServiceController
- *
- * @details
- * Методы обеспечивают полное управление жизненным циклом сервиса:
- *  - run(): инициализация и запуск
- *  - initialize(): настройка сигналов и Master
- *  - initLogger(): конфигурация логирования
- *  - mainLoop(): работа в цикле с healthCheck()
- *  - handleShutdown(): завершение работы
- */
-
+@file service_controller.cpp
+@brief Реализация методов ServiceController.
+@version 3.1.0
+@date 2026-07-21
+*/
 #include "../include/service_controller.hpp"
+
 #include <signal.h>
-#include <fstream>
-#include <mutex>
 #include <condition_variable>
+#include <fstream>
 #include <iostream>
+#include <mutex>
+
 #include "../include/FilterListManager.hpp"
-#include "stc/compositelogger.hpp"
-#include "stc/consolelogger.hpp"
-#include "stc/asyncfilelogger.hpp"
-#include "stc/syncfilelogger.hpp"
-// #include "../include/signal_mask_guard.hpp"
+#include "../include/logger_factory.hpp"
+
+#include "stc/metrics/metrics_registry.hpp"
+#include "stc/metrics/noop_metrics.hpp"
+#include "stc/metrics/prometheus_exporter.hpp"
+#include "stc/signals/signal_router.hpp"
 
 using namespace std::chrono_literals;
 
-int ServiceController::run(int argc, char **argv) {
-    // SignalMaskGuard guard({SIGINT, SIGTERM, SIGHUP});
+namespace stc {
 
-    sigset_t block_set;
-sigemptyset(&block_set);
-sigaddset(&block_set, SIGHUP);
-pthread_sigmask(SIG_BLOCK, &block_set, nullptr);
-std::cout << "Global block of SIGHUP installed" << std::endl;
+constexpr char* const kPidFile = "/run/xmlfilter.pid";
 
+int ServiceController::Run(int argc, char **argv) {
     try {
-        sigset_t initial_mask;
-        pthread_sigmask(SIG_SETMASK, nullptr, &initial_mask);
-        if (sigismember(&initial_mask, SIGHUP)) {
-            std::cout << "DIAGNOSTIC: SIGHUP is BLOCKED at start of run()!" << std::endl;
-        } else {
-            std::cout << "DIAGNOSTIC: SIGHUP is NOT blocked at start of run()" << std::endl;
-        }
-        // Парсинг аргументов
         ArgumentParser parser;
-        ParsedArgs args = parser.parse(argc, argv);
-        pidFileMgr_ = std::make_unique<PidFileManager>(
-    args.daemon_mode ? "/var/run/xmlfilter.pid"
-                     : (std::getenv("HOME")
-                          ? std::string(std::getenv("HOME")) + "/.xmlfilter.pid"
-                          : "./xmlfilter.pid")
-);
+        ParsedArgs args = parser.Parse(argc, argv);
 
-        if (args.help_message) {
-            printHelp();
-            return EXIT_SUCCESS;
-        }
-        if (args.version_message) {
-            printVersion();
-            return EXIT_SUCCESS;
-        }
-        if (args.reload) {
-    if (auto pidOpt = pidFileMgr_->read()) {
-            kill(*pidOpt, SIGHUP);
-            std::cout << "Reload signal sent (PID " << *pidOpt << ")\n";
-            return EXIT_SUCCESS;
-        } else {
-            std::cerr << "Service is not running (PID file not found)\n";
-            return EXIT_FAILURE;
-        }
-}
+        pid_file_mgr_ = std::make_unique<PidFileManager>(kPidFile);
 
-        // Демонизация или запись PID для foreground
-        config_path_ = args.config_path;
-        if (args.daemon_mode) {
-    daemon_ = std::make_unique<stc::DaemonManager>(pidFileMgr_->path().c_str());
-    daemon_->daemonize();
-    pidFileMgr_->write();
-    pthread_sigmask(SIG_SETMASK, nullptr, &initial_mask);
-            if (sigismember(&initial_mask, SIGHUP)) {
-                std::cout << "DIAGNOSTIC: SIGHUP is BLOCKED after daemonize()!" << std::endl;
+        if (args.help_message_) {
+            PrintHelp();
+            return EXIT_SUCCESS;
+        }
+        if (args.version_message_) {
+            PrintVersion();
+            return EXIT_SUCCESS;
+        }
+        if (args.reload_) {
+            if (auto pid_opt = pid_file_mgr_->read()) {
+                kill(*pid_opt, SIGHUP);
+                std::cout << "Reload signal sent (PID " << *pid_opt << ")\n";
+                return EXIT_SUCCESS;
+            } else {
+                std::cerr << "Service is not running (PID file not found)\n";
+                return EXIT_FAILURE;
             }
-} else {
-    pidFileMgr_->write();
-}
-        
-        stc::CompositeLogger::instance().info("FORCED SIGHUP unblock before initialize");
-        // Загрузка конфигурации и логгера
+        }
+
+        config_path_ = args.config_path_;
+        pid_file_mgr_->write();
+
         ConfigManager::instance().initialize(config_path_);
-        if (!args.overrides.empty())
-            ConfigManager::instance().applyCliOverrides(args.overrides);
-        initLogger(args);
+        if (!args.overrides_.empty()) {
+            ConfigManager::instance().applyCliOverrides(args.overrides_);
+        }
 
-        // Регистрация сигналов и запуск Master
-        initialize(args);
-        stc::SignalRouter::instance().start();
-        stc::CompositeLogger::instance().info("SignalRouter started successfully");
+        InitLogger(args);
+        logger_->Info("Configuration loaded successfully.");
 
-        // Инициализация CSV-фильтра
-        std::string globalCsv =
-            ConfigManager::instance().getGlobalComparisonList(args.environment);
-        FilterListManager::instance().initialize(globalCsv);
+        // 1. Создание реестра метрик (пока жестко MetricsRegistry, в будущем - по флагу из конфига)
+        metrics_registry_ = std::make_shared<stc::metrics::MetricsRegistry>();
+        
+        // 2. Регистрация общих метрик
+        RegisterGlobalMetrics();
 
-        // Запуск обработки сигналов и главный цикл
-        mainLoop();
+        Initialize(args);
+
+        signal_router_->start();
+        logger_->Info("SignalRouter started successfully.");
+
+        // 3. Инициализация FilterListManager и обновление метрики шаблонов
+        std::string global_csv = ConfigManager::instance().getGlobalComparisonList(args.environment_);
+        FilterListManager::instance().initialize(global_csv);
+        
+        if (global_metrics_.templates_count) {
+            global_metrics_.templates_count->Set(
+                static_cast<double>(FilterListManager::instance().getTotalRecordsCount()));
+            logger_->Info("Global templates count metric updated: " + 
+                          std::to_string(FilterListManager::instance().getTotalRecordsCount()));
+        }
+
+        MainLoop();
         return EXIT_SUCCESS;
-    }
-    catch (const std::exception &e) {
-        stc::CompositeLogger::instance().critical(e.what());
-        if (daemon_) daemon_->cleanup();
+
+    } catch (const std::exception &e) {
+        if (logger_) {
+            logger_->Critical(std::string("Fatal error: ") + e.what());
+            logger_->Flush();
+        } else {
+            std::cerr << "Fatal error (logger not initialized): " << e.what() << std::endl;
+        }
         return EXIT_FAILURE;
     }
 }
 
-void ServiceController::initialize(const ParsedArgs &args) {
-  auto &router = stc::SignalRouter::instance();
-    stc::CompositeLogger::instance().debug("Service controller: Registering signal handlers ...");
-  
-    // Graceful shutdown на SIGTERM и SIGINT
-    router.registerHandler(SIGTERM, [this](int sig_num){
-        stc::CompositeLogger::instance().info("SIGTERM received (signal " + std::to_string(sig_num) + "), shutting down");
-        handleShutdown();
-    });
-    router.registerHandler(SIGINT, [this](int sig_num){
-        stc::CompositeLogger::instance().info("SIGINT received (signal " + std::to_string(sig_num) + "), shutting down");
-        handleShutdown();
-    });
+void ServiceController::RegisterGlobalMetrics() {
+    // Counters
+    global_metrics_.files_processed = metrics_registry_->RegisterCounter("xml_files_processed_total", "Total successfully processed files");
+    global_metrics_.files_failed = metrics_registry_->RegisterCounter("xml_files_failed_total", "Total failed files");
+    global_metrics_.records_processed = metrics_registry_->RegisterCounter("xml_records_processed_total", "Total processed XML records");
+    global_metrics_.records_matched = metrics_registry_->RegisterCounter("xml_records_matched_total", "Total matched XML records");
+    global_metrics_.bytes_processed = metrics_registry_->RegisterCounter("xml_bytes_processed_total", "Total processed bytes");
 
-    stc::CompositeLogger::instance().info("Registering SIGHUP handler...");
-    
-    // Проверить, что SIGHUP не заблокирован
-    sigset_t current_mask;
-    pthread_sigmask(SIG_SETMASK, nullptr, &current_mask);
-    if (sigismember(&current_mask, SIGHUP)) {
-        stc::CompositeLogger::instance().warning("SIGHUP is blocked before registration!");
-    } else {
-        stc::CompositeLogger::instance().info("SIGHUP is not blocked - good");
-    }
-    // Reload конфигурации на SIGHUP
-    router.registerHandler(SIGHUP, [this, &args](int sig_num){
-        stc::CompositeLogger::instance().info("SIGHUP handler called with signal: " + std::to_string(sig_num));
-    stc::CompositeLogger::instance().info("SIGHUP received, starting reconfiguration");
-    try {
-        // Транзакционная перезагрузка конфигурации
-        ConfigReloadTransaction tx(ConfigManager::instance());
-        tx.reload();
-        
-        // Используем встроенный reload вместо полного пересоздания
-        reloadWorkers(args);
-        
-        stc::CompositeLogger::instance().info("SIGHUP: configuration reloaded and workers restarted");
-    } catch (const std::exception& e) {
-        stc::CompositeLogger::instance().critical(
-            std::string("SIGHUP: reload failed: ") + e.what()
-        );
-        // НЕ завершаем процесс при ошибке reload
-    }
-        });
-    sigset_t test_mask;
-pthread_sigmask(SIG_SETMASK, nullptr, &test_mask);
-if (sigismember(&test_mask, SIGHUP)) {
-    stc::CompositeLogger::instance().info("Post-register: SIGHUP is BLOCKED");
-} else {
-    stc::CompositeLogger::instance().error("Post-register: SIGHUP is NOT blocked");
+    // Gauges
+    global_metrics_.templates_count = metrics_registry_->RegisterGauge("xml_comparison_templates_count", "Current templates count");
+    global_metrics_.active_workers = metrics_registry_->RegisterGauge("active_workers_count", "Current active workers");
+    global_metrics_.duration_avg = metrics_registry_->RegisterGauge("xml_processing_duration_avg_seconds", "Sliding average processing time");
+
+    // Histogram
+    global_metrics_.duration_hist = metrics_registry_->RegisterHistogram(
+        "xml_processing_duration_seconds", 
+        "Processing duration", 
+        {0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0});
+
+    logger_->Info("Global metrics registered successfully.");
 }
-    stc::CompositeLogger::instance().info("All signal handlers registered successfully");
 
-    // Создаем и стартуем Master
+void ServiceController::Initialize(const ParsedArgs &args) {
+    signal_router_ = std::make_unique<stc::signals::SignalRouter>();
+    
+    logger_->Debug("Service controller: Registering signal handlers...");
+    
+    signal_router_->RegisterHandler(SIGTERM, [this](int) {
+        if (logger_) logger_->Info("SIGTERM received, shutting down.");
+        HandleShutdown();
+    });
+    
+    signal_router_->RegisterHandler(SIGINT, [this](int) {
+        if (logger_) logger_->Info("SIGINT received, shutting down.");
+        HandleShutdown();
+    });
+    
+    signal_router_->RegisterHandler(SIGHUP, [this, args](int) {
+        if (logger_) logger_->Info("SIGHUP received, starting reconfiguration.");
+        try {
+            ConfigReloadTransaction tx(ConfigManager::instance(), logger_);
+            tx.reload();
+            
+            // Перезагрузка FilterListManager и обновление метрики шаблонов
+            std::string global_csv = ConfigManager::instance().getGlobalComparisonList(args.environment_);
+            FilterListManager::instance().reload();
+            if (global_metrics_.templates_count) {
+                global_metrics_.templates_count->Set(
+                    static_cast<double>(FilterListManager::instance().getTotalRecordsCount()));
+            }
+
+            ReloadWorkers(args);
+            if (logger_) logger_->Info("SIGHUP: configuration reloaded and workers restarted.");
+        } catch (const std::exception& e) {
+            if (logger_) logger_->Critical(std::string("SIGHUP: reload failed: ") + e.what());
+        }
+    });
+
+    // Инъекция реестра и глобальных метрик в Master
     master_ = std::make_unique<Master>(
-        [&args]() { return ConfigManager::instance().getMergedConfig(args.environment); }
+        [&args]() { return ConfigManager::instance().getMergedConfig(args.environment_); },
+        logger_,
+        metrics_registry_,
+        global_metrics_
     );
     master_->start();
 }
 
-void ServiceController::initLogger(const ParsedArgs &args) {
-  auto &composite_logger = stc::CompositeLogger::instance();
-
-  // Лямбда для безопасного создания shared_ptr из синглтона
-  auto getSingletonPtr = [](auto &singleton) {
-    return std::shared_ptr<std::remove_reference_t<decltype(singleton)>>(
-        &singleton, [](auto *) {});
-  };
-
-  if (!args.use_cli_logging) {
-    auto config = ConfigManager::instance().getMergedConfig(args.environment);
-    if (config.contains("logging") && config["logging"].is_array()) {
-      for (auto &entry : config["logging"]) {
-        std::string type = entry.value("type", "console");
-        std::string level = entry.value("level", "info");
-        std::string file = entry.value("file", "service.log");
-        // bool rotatad = entry.value("rotated", false);
-
-        if (type == "console") {
-          auto &logger = stc::ConsoleLogger::instance();
-          logger.setLogLevel(stc::stringToLogLevel(level));
-          composite_logger.addLogger(getSingletonPtr(logger));
-        } else if (type == "async_file") {
-          auto &logger = stc::AsyncFileLogger::instance();
-          logger.setMainLogPath(file);
-          logger.setLogLevel(stc::stringToLogLevel(level));
-          composite_logger.addLogger(getSingletonPtr(logger));
-        } else if (type == "sync_file") {
-          auto &logger = stc::SyncFileLogger::instance();
-          logger.setMainLogPath(file);
-          logger.setLogLevel(stc::stringToLogLevel(level));
-          composite_logger.addLogger(getSingletonPtr(logger));
-        }
-      }
+void ServiceController::InitLogger(const ParsedArgs &args) {
+    std::vector<LoggerSinkConfig> sinks_config;
+    if (args.use_cli_logging_) {
+        // Логика формирования sinks_config из CLI (упрощенно)
+    } else {
+        sinks_config = ConfigManager::instance().getLoggingSinksConfig(args.environment_);
     }
-  } else if (!args.logger_types.empty()) {
-    for (const auto &type : args.logger_types) {
-      if (type == "console") {
-        composite_logger.addLogger(
-            getSingletonPtr(stc::ConsoleLogger::instance()));
-      } else if (type == "async_file") {
-        auto &logger = stc::AsyncFileLogger::instance();
-        logger.setMainLogPath("async_service.log");
-        composite_logger.addLogger(getSingletonPtr(logger));
-      } else if (type == "sync_file") {
-        auto &logger = stc::SyncFileLogger::instance();
-        logger.setMainLogPath("sync_service.log");
-        composite_logger.addLogger(getSingletonPtr(logger));
-      }
-    }
-  } else {
-    composite_logger.addLogger(getSingletonPtr(stc::ConsoleLogger::instance()));
-  }
-
-  if (args.log_level.has_value()) {
-    composite_logger.setLogLevel(stc::stringToLogLevel(args.log_level.value()));
-  }
+    logger_ = LoggerFactory::Create(sinks_config);
+    logger_->Info("Logger subsystem initialized.");
 }
 
-void ServiceController::mainLoop() {
-  std::unique_lock<std::mutex> lock(mtx_);
+void ServiceController::MainLoop() {
+    std::unique_lock<std::mutex> lock(mtx_);
     running_ = true;
-    
-    stc::CompositeLogger::instance().info("Service controller: Service main loop started");
-    
+    logger_->Info("Service controller: Service main loop started.");
+
     while (!shutdown_requested_.load(std::memory_order_acquire)) {
-        // Разблокируем мьютекс на время healthCheck
         lock.unlock();
-        // sigset_t current_mask;
-        // // pthread_sigmask(SIG_UNBLOCK, nullptr, &current_mask);
-        // if (sigismember(&current_mask, SIGINT)) {
-        //    stc::CompositeLogger::instance().warning("SIGINT is still blocked after reload!");
-        // }
-        stc::CompositeLogger::instance().debug("ServiceController::mainLoop() — shutdown_requested=" + std::to_string(shutdown_requested_.load()));
         master_->healthCheck();
         lock.lock();
-        
-        // Ждем сигнал завершения или таймаут
-        cv_.wait_for(lock, std::chrono::milliseconds(500),
-                     [this]{ return shutdown_requested_.load(std::memory_order_acquire); });
+        cv_.wait_for(lock, 500ms, [this] { 
+            return shutdown_requested_.load(std::memory_order_acquire); 
+        });
     }
-    
     running_ = false;
-    stc::CompositeLogger::instance().info("Service controller: Service main loop ended");
+    logger_->Info("Service controller: Service main loop ended.");
 }
 
-void ServiceController::handleShutdown() {
-    stc::CompositeLogger::instance().debug("ServiceController::handleShutdown() ENTER");
-    
-    // Устанавливаем флаг завершения
+void ServiceController::HandleShutdown() {
+    logger_->Debug("ServiceController::HandleShutdown() ENTER");
     shutdown_requested_.store(true, std::memory_order_release);
-    
-    // Пробуждаем mainLoop
     {
-        std::lock_guard lg(mtx_);
+        std::lock_guard<std::mutex> lg(mtx_);
         running_ = false;
     }
     cv_.notify_one();
-    
-    // Останавливаем компоненты
+
     if (master_) {
         master_->stop();
     }
-    
-    // ВАЖНО: Удаляем PID файл только при полном shutdown
-    if (pidFileMgr_) {
-        pidFileMgr_->remove();  // Явно удаляем PID-файл
+    if (signal_router_) {
+        signal_router_->stop();
     }
-    
-    if (daemon_) {
-        daemon_->cleanup();
+    if (pid_file_mgr_) {
+        pid_file_mgr_->remove();
     }
-    
-    stc::SignalRouter::instance().stop();
-    stc::CompositeLogger::instance().info("Service controller: Service shutdown complete");
+
+    if (logger_) {
+        logger_->Info("Service controller: Service shutdown complete.");
+        logger_->Flush();
+    }
 }
 
-void ServiceController::reloadWorkers(const ParsedArgs &args) {
-    stc::CompositeLogger::instance().info("ServiceController: Starting worker reload");
-    (void)args;
+void ServiceController::ReloadWorkers(const ParsedArgs &args) {
+    logger_->Info("ServiceController: Starting worker reload");
     if (master_) {
         try {
             master_->reload();
-            stc::CompositeLogger::instance().info("ServiceController: Workers reloaded successfully");
-        } catch (const std::exception& e) {
-            stc::CompositeLogger::instance().error(
-                "ServiceController: Worker reload failed: " + std::string(e.what())
-            );
+            logger_->Info("ServiceController: Workers reloaded successfully");
+        } catch (const std::exception & e) {
+            logger_->Error("ServiceController: Worker reload failed: " + std::string(e.what()));
         }
     } else {
-        stc::CompositeLogger::instance().warning("ServiceController: No master to reload");
+        logger_->Warning("ServiceController: No master to reload");
     }
 }
 
-void ServiceController::printHelp() {
-  std::cout << "XML Filter Service\n\n"
-       << "Usage:\n"
-       << " service [options]\n\n"
-       << "Options:\n"
-       << " --help, -h          Show this help message\n"
-       << " --version, -v       Show version info\n"
-       << " --config-file=FILE  Configuration file path\n"
-       << " --override=KEY:VAL  Override config parameter\n"
-       << " --log-type=TYPES    Logger types (comma-separated)\n"
-       << " --log-level=LEVEL   Logging level "
-          "[debug|info|warning|error|critical]\n"
-       << " --daemon            Run as daemon\n";
-};
-
-void ServiceController::printVersion() {
-  std::cout << "XML Filter service v0.95.0\n"
-            << "(c) 2025 by Artem Ulyanov, STC LLC.\n";
+std::string ServiceController::GetMetricsPayload() const {
+    if (!metrics_registry_) {
+        return "";
+    }
+    // Формируем снимок состояния с префиксом неймспейса "xmlfilter"
+    return stc::metrics::ExportToPrometheus(*metrics_registry_, "xmlfilter");
 }
+
+void ServiceController::PrintHelp() {
+    std::cout << "XML Filter Service\n\n"
+              << "Usage:\n"
+              << " service [options]\n\n"
+              << "Options:\n"
+              << " --help, -h          Show this help message\n"
+              << " --version, -v       Show version info\n"
+              << " --config-file=FILE  Configuration file path\n"
+              << " --override=KEY:VAL  Override config parameter\n"
+              << " --log-type=TYPES    Logger types (comma-separated)\n"
+              << " --log-level=LEVEL   Logging level\n"
+              << " --reload, -r        Send SIGHUP to running instance\n";
+}
+
+void ServiceController::PrintVersion() {
+    std::cout << "XML Filter service v1.0.0\n"
+              << "(c) 2026 by Artem Ulyanov, STC LLC.\n";
+}
+
+} // namespace stc

@@ -1,49 +1,58 @@
+/**
+@file config_reload_transaction.cpp
+@brief Реализация транзакционной перезагрузки конфигурации.
+@version 2.0.0
+@date 2026-07-17
+*/
 #include "../include/config_reload_transaction.hpp"
-#include "stc/compositelogger.hpp"
 
-ConfigReloadTransaction::ConfigReloadTransaction(ConfigManager& configMgr)
-    : configMgr_(configMgr) {}
+#include <stdexcept>
+
+namespace stc {
+
+ConfigReloadTransaction::ConfigReloadTransaction(ConfigManager& configMgr,
+                                                 std::shared_ptr<stc::logger::ILogger> logger)
+    : configMgr_(configMgr), logger_(std::move(logger)) {}
 
 ConfigReloadTransaction::~ConfigReloadTransaction() {
     if (active_) {
         try {
             rollback();
         } catch (const std::exception& e) {
-            stc::CompositeLogger::instance().error(
-                "ConfigReloadTransaction::~ConfigReloadTransaction: rollback failed: " + std::string(e.what()));
+            if (logger_) {
+                logger_->Error(std::string("ConfigReloadTransaction:: rollback failed: ") + e.what());
+            }
         }
     }
 }
 
 void ConfigReloadTransaction::begin() {
     if (active_) {
-        throw std::runtime_error("Transaction already active");
+        throw std::runtime_error("ConfigReloadTransaction: Transaction already active");
     }
-    std::lock_guard lock(configMgr_.configMutex_);
-    backup_ = configMgr_.baseConfig_;
+    // Используем публичный геттер, который внутри себя корректно захватывает мьютекс ConfigManager
+    backup_ = configMgr_.getCurrentConfig();
     active_ = true;
-    stc::CompositeLogger::instance().debug("ConfigReloadTransaction: backup created");
+    if (logger_) logger_->Debug("ConfigReloadTransaction: backup created");
 }
 
 void ConfigReloadTransaction::commit() {
     if (!active_) {
-        throw std::runtime_error("No active transaction");
+        throw std::runtime_error("ConfigReloadTransaction: No active transaction");
     }
     active_ = false;
-    stc::CompositeLogger::instance().debug("ConfigReloadTransaction: committed");
+    backup_.clear(); // Освобождаем память, занимаемую резервной копией
+    if (logger_) logger_->Debug("ConfigReloadTransaction: committed");
 }
 
 void ConfigReloadTransaction::rollback() {
     if (!active_) {
-        throw std::runtime_error("No active transaction");
+        throw std::runtime_error("ConfigReloadTransaction: No active transaction");
     }
-    {
-        std::lock_guard lock(configMgr_.configMutex_);
-        configMgr_.baseConfig_ = backup_;
-        configMgr_.cache_.clearAll();
-    }
+    configMgr_.restoreFromBackup(backup_);
     active_ = false;
-    stc::CompositeLogger::instance().info("ConfigReloadTransaction: rolled back");
+    backup_.clear();
+    if (logger_) logger_->Info("ConfigReloadTransaction: rolled back");
 }
 
 void ConfigReloadTransaction::reload() {
@@ -51,11 +60,14 @@ void ConfigReloadTransaction::reload() {
     try {
         configMgr_.reload();
         commit();
-        stc::CompositeLogger::instance().info("ConfigReloadTransaction: reload successful");
+        if (logger_) logger_->Info("ConfigReloadTransaction: reload successful");
     } catch (const std::exception& e) {
-        stc::CompositeLogger::instance().warning(
-            "ConfigReloadTransaction: reload failed, rolling back: " + std::string(e.what()));
+        if (logger_) {
+            logger_->Warning(std::string("ConfigReloadTransaction: reload failed, rolling back: ") + e.what());
+        }
         rollback();
         throw;
     }
 }
+
+} // namespace stc

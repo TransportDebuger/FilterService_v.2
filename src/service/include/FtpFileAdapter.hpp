@@ -1,14 +1,12 @@
 /**
- * @file FtpFileAdapter.hpp
- * @brief Адаптер для работы с FTP хранилищами
- *
- * @details Реализует FileStorageInterface для FTP-серверов
- *          с периодическим опросом для мониторинга изменений
- */
-
+@file FtpFileAdapter.hpp
+@brief Адаптер для работы с FTP хранилищами.
+@version 2.0.0
+@date 2026-07-17
+*/
 #pragma once
-#include <curl/curl.h>
 
+#include <curl/curl.h>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -16,140 +14,113 @@
 #include <mutex>
 #include <sstream>
 #include <thread>
+#include <vector>
 
-#include "../include/filestorageinterface.hpp"
-#include "../include/sourceconfig.hpp"
+#include "filestorageinterface.hpp"
+#include "sourceconfig.hpp"
+#include "stc/logger/ilogger.hpp"
 
 namespace fs = std::filesystem;
 
+namespace stc {
+
 /**
- * @class FtpFileAdapter
- * @brief Адаптер для работы с FTP файловыми хранилищами
- *
- * @note Использует libcurl для FTP-операций и периодический опрос
- *       для мониторинга изменений в директориях FTP-сервера
- * @warning Требует установленной библиотеки libcurl
- */
-class FtpFileAdapter : public FileStorageInterface {
- public:
-  /**
-   * @brief Конструктор с конфигурацией источника
-   * @param config Конфигурация FTP-источника данных
-   * @throw std::invalid_argument При невалидной конфигурации
-   */
-  explicit FtpFileAdapter(const SourceConfig &config);
+@class FtpFileAdapter
+@brief Адаптер для работы с FTP файловыми хранилищами.
+*/
+class FtpFileAdapter : public IFileStorage {
+public:
+    /**
+    @brief Конструктор адаптера FTP.
+    @param[in] config Конфигурация FTP-источника данных.
+    @param[in] logger Диспетчер логирования.
+    @throw std::invalid_argument При невалидной конфигурации или URL.
+    */
+    explicit FtpFileAdapter(const SourceConfig &config, 
+                            std::shared_ptr<stc::logger::ILogger> logger);
 
-  /**
-   * @brief Деструктор
-   * @note Автоматически останавливает мониторинг и закрывает соединение
-   */
-  ~FtpFileAdapter() override;
+    ~FtpFileAdapter() override;
 
-  // Основные операции FileStorageInterface
-  std::vector<std::string> listFiles(const std::string &path) override;
-  void downloadFile(const std::string &remotePath,
-                    const std::string &localPath) override;
-  void upload(const std::string &localPath,
-              const std::string &remotePath) override;
+    std::vector<std::string> listFiles(const std::string &path) override;
+    void downloadFile(const std::string &remotePath, const std::string &localPath) override;
+    void upload(const std::string &localPath, const std::string &remotePath) override;
+    void connect() override;
+    void disconnect() override;
+    bool isConnected() const noexcept override;
+    void startMonitoring() override;
+    void stopMonitoring() override;
+    bool isMonitoring() const noexcept override;
+    void setCallback(FileDetectedCallback callback) override;
 
-  // Управление соединением
-  void connect() override;
-  void disconnect() override;
-  bool isConnected() const noexcept override;
+private:
+    /// @private Структура для хранения данных ответа от сервера.
+    struct CurlResponse {
+        std::string data;
+        size_t size;
+    };
 
-  // Мониторинг изменений
-  void startMonitoring() override;
-  void stopMonitoring() override;
-  bool isMonitoring() const noexcept override;
+    /// @private Callback для записи данных от libcurl.
+    static size_t writeCallback(void *contents, size_t size, size_t nmemb, CurlResponse *response);
 
-  // Управление коллбэками
-  void setCallback(FileDetectedCallback callback) override;
+    /// @private Callback для чтения данных для libcurl.
+    static size_t readCallback(void *ptr, size_t size, size_t nmemb, FILE *stream);
 
- private:
-  /**
-   * @brief Структура для хранения данных ответа от сервера
-   */
-  struct CurlResponse {
-    std::string data;
-    size_t size;
-  };
+    /// @private Проверяет доступность FTP-сервера.
+    bool checkServerAvailability() const;
 
-  /**
-   * @brief Callback для записи данных от libcurl
-   * @param contents Указатель на данные
-   * @param size Размер элемента данных
-   * @param nmemb Количество элементов
-   * @param response Указатель на структуру ответа
-   */
-  static size_t writeCallback(void *contents, size_t size, size_t nmemb,
-                              CurlResponse *response);
+    /// @private Основной цикл мониторинга.
+    void monitoringLoop();
 
-  /**
-   * @brief Callback для чтения данных для libcurl
-   * @param ptr Указатель на буфер
-   * @param size Размер элемента
-   * @param nmemb Количество элементов
-   * @param stream Файловый поток
-   */
-  static size_t readCallback(void *ptr, size_t size, size_t nmemb,
-                             FILE *stream);
+    /// @private Парсит список файлов из ответа FTP LIST.
+    std::vector<std::string> parseFileList(const std::string &listOutput) const;
 
-  /**
-   * @brief Проверяет доступность FTP-сервера
-   * @return true если сервер доступен
-   */
-  bool checkServerAvailability() const;
+    /// @private Проверяет соответствие файла маске.
+    bool matchesFileMask(const std::string &filename) const;
 
-  /**
-   * @brief Основной цикл мониторинга
-   */
-  void monitoringLoop();
+    /// @private Формирует полный FTP URL.
+    std::string buildFtpUrl(const std::string &path = "") const;
 
-  /**
-   * @brief Парсит список файлов из ответа FTP LIST
-   * @param listOutput Вывод команды LIST
-   * @return Вектор имен файлов
-   */
-  std::vector<std::string> parseFileList(const std::string &listOutput) const;
+    /// @private Валидирует параметры FTP-подключения.
+    void validateFtpConfig() const;
 
-  /**
-   * @brief Проверяет соответствие файла маске
-   * @param filename Имя файла
-   * @return true если файл соответствует маске
-   */
-  bool matchesFileMask(const std::string &filename) const;
+    /// @private Сравнивает текущий список файлов с предыдущим.
+    void compareFilesList(const std::vector<std::string> &currentFiles);
 
-  /**
-   * @brief Формирует полный FTP URL
-   * @param path Путь к файлу или директории
-   * @return Полный FTP URL
-   */
-  std::string buildFtpUrl(const std::string &path = "") const;
-
-  /**
-   * @brief Валидирует параметры FTP-подключения
-   * @throw std::invalid_argument При отсутствии обязательных параметров
-   */
-  void validateFtpConfig() const;
-
-  /**
-   * @brief Сравнивает текущий список файлов с предыдущим
-   * @param currentFiles Текущий список файлов
-   */
-  void compareFilesList(const std::vector<std::string> &currentFiles);
-
-  SourceConfig config_;   ///< Конфигурация источника
-  std::string ftpUrl_;    ///< Базовый FTP URL
-  std::string server_;    ///< Имя или IP сервера
-  std::string username_;  ///< Имя пользователя
-  std::string password_;  ///< Пароль
-  int port_;              ///< Порт FTP-сервера
-
-  std::atomic<bool> connected_{false};   ///< Статус соединения
-  std::atomic<bool> monitoring_{false};  ///< Статус мониторинга
-  mutable std::mutex mutex_;  ///< Мьютекс для потокобезопасности
-
-  std::thread monitoringThread_;  ///< Поток мониторинга
-  std::vector<std::string> lastFilesList_;  ///< Предыдущий список файлов
-  std::chrono::seconds pollingInterval_;  ///< Интервал опроса
+    /// @private Конфигурация источника.
+    SourceConfig config_;
+    
+    /// @private Базовый FTP URL.
+    std::string ftpUrl_;
+    
+    /// @private Имя или IP сервера.
+    std::string server_;
+    
+    /// @private Имя пользователя.
+    std::string username_;
+    
+    /// @private Пароль.
+    std::string password_;
+    
+    /// @private Порт FTP-сервера.
+    int port_;
+    
+    /// @private Статус соединения.
+    std::atomic<bool> connected_{false};
+    
+    /// @private Статус мониторинга.
+    std::atomic<bool> monitoring_{false};
+    
+    /// @private Мьютекс для потокобезопасности.
+    mutable std::mutex mutex_;
+    
+    /// @private Поток мониторинга.
+    std::thread monitoringThread_;
+    
+    /// @private Предыдущий список файлов.
+    std::vector<std::string> lastFilesList_;
+    
+    /// @private Интервал опроса.
+    std::chrono::seconds pollingInterval_;
 };
+
+} // namespace stc

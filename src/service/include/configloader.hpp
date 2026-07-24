@@ -301,5 +301,5 @@ class ConfigLoader {
    * loadFromFile(). Используется для операций перезагрузки и информационных
    * запросов. Пустая строка означает, что ни один файл не был загружен.
    */
-  std::string lastLoadedFile;
+  std::string _lastLoadedFile;
 };
