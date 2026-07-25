@@ -11,11 +11,17 @@ CompositeFilter::CompositeFilter(
     throw std::invalid_argument(
         "CompositeFilter: filters vector cannot be empty");
   }
+  
+  // Проверка на наличие nullptr среди дочерних фильтров
+  if (std::any_of(filters_.begin(), filters_.end(),
+                  [](const auto& p) { return p == nullptr; })) {
+    throw std::invalid_argument(
+        "CompositeFilter: filters vector cannot contain nullptr");
+  }
 }
 
 bool CompositeFilter::ShouldPass(const LogRecord& record) const {
   if (op_ == LogicOperator::kAnd) {
-    // Short-circuit AND: return false on the first failure
     for (const auto& filter : filters_) {
       if (!filter->ShouldPass(record)) {
         return false;
@@ -23,9 +29,8 @@ bool CompositeFilter::ShouldPass(const LogRecord& record) const {
     }
     return true;
   }
-
+  
   // LogicOperator::kOr
-  // Short-circuit OR: return true on the first success
   for (const auto& filter : filters_) {
     if (filter->ShouldPass(record)) {
       return true;

@@ -28,8 +28,8 @@ class TextFormatter final : public ILogFormatter {
    * @param time_format Формат временной метки (совместим с std::strftime).
    */
   explicit TextFormatter(
-      std::string pattern = "[%Y-%m-%d %H:%M:%S] [%level] %msg\n",
-      std::string time_format = "%Y-%m-%d %H:%M:%S");
+    std::string pattern = "[%time] [%level] %msg\n",
+    std::string time_format = "%Y-%m-%d %H:%M:%S");
 
   ~TextFormatter() override = default;
 

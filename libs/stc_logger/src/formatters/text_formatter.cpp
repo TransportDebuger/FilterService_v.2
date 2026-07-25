@@ -9,13 +9,17 @@ TextFormatter::TextFormatter(std::string pattern, std::string time_format)
 
 std::string TextFormatter::Format(const LogRecord& record) const {
   std::string output;
-  // Резервируем память для уменьшения количества реаллокаций в куче.
-  // +64 байт на случай длинных имен файлов и функций.
-  output.reserve(pattern_.size() + record.message.size() + 64);
+  const std::size_t len = pattern_.size();
+  
+  output.reserve(len + record.message.size() + 64);
 
-  for (size_t i = 0; i < pattern_.size(); ++i) {
-    if (pattern_[i] == '%' && i + 1 < pattern_.size()) {
-      // Проверка плейсхолдеров через std::string::compare (быстрее, чем substr)
+  std::size_t start = 0;
+  for (std::size_t i = 0; i < len; ++i) {
+    if (pattern_[i] == '%' && i + 1 < len) {
+      if (i > start) {
+        output.append(pattern_.data() + start, i - start);
+      }
+
       if (pattern_.compare(i, 4, "%msg") == 0) {
         output.append(record.message);
         i += 3;
@@ -37,10 +41,14 @@ std::string TextFormatter::Format(const LogRecord& record) const {
       } else {
         output.push_back(pattern_[i]);
       }
-    } else {
-      output.push_back(pattern_[i]);
+      start = i + 1;
     }
   }
+
+  if (start < len) {
+    output.append(pattern_.data() + start, len - start);
+  }
+
   return output;
 }
 
@@ -48,10 +56,7 @@ std::string TextFormatter::FormatTime(
     std::chrono::system_clock::time_point tp) const {
   std::time_t t = std::chrono::system_clock::to_time_t(tp);
   std::tm tm{};
-
-  // Потокобезопасная версия localtime для POSIX (Linux)
   localtime_r(&t, &tm);
-
   char buffer[64];
   std::strftime(buffer, sizeof(buffer), time_format_.c_str(), &tm);
   return std::string(buffer);
@@ -59,20 +64,13 @@ std::string TextFormatter::FormatTime(
 
 std::string_view TextFormatter::LevelToString(LogLevel level) {
   switch (level) {
-    case LogLevel::kTrace:
-      return "TRACE";
-    case LogLevel::kDebug:
-      return "DEBUG";
-    case LogLevel::kInfo:
-      return "INFO";
-    case LogLevel::kWarning:
-      return "WARNING";
-    case LogLevel::kError:
-      return "ERROR";
-    case LogLevel::kCritical:
-      return "CRITICAL";
-    default:
-      return "UNKNOWN";
+    case LogLevel::kTrace:    return "TRACE";
+    case LogLevel::kDebug:    return "DEBUG";
+    case LogLevel::kInfo:     return "INFO";
+    case LogLevel::kWarning:  return "WARNING";
+    case LogLevel::kError:    return "ERROR";
+    case LogLevel::kCritical: return "CRITICAL";
+    default:                  return "UNKNOWN";
   }
 }
 

@@ -100,6 +100,7 @@ install(EXPORT stc_logger_targets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/stc_logger
 )
 
+if(STC_LOGGER_BUILD_TESTS)
 # ==============================================================================
 # Сбор списка исходных файлов для линтеров
 # ==============================================================================
@@ -263,4 +264,6 @@ else()
         COMMAND ${CMAKE_COMMAND} -E false
         COMMENT "FATAL: Doxygen not found. Please install Doxygen to generate documentation."
     )
+endif()
+
 endif()

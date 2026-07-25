@@ -37,22 +37,11 @@ class JsonFormatter final : public ILogFormatter {
   std::string Format(const LogRecord& record) const override;
 
  private:
-  /** @private
-   *  @brief Форматирует временную метку в формат ISO 8601 (с миллисекундами).
-   *  @param tp Точка времени для форматирования.
-   *  @return Строка с отформатированным временем.
-   */
-  static std::string FormatTimeIso8601(
-      std::chrono::system_clock::time_point tp);
+  static void AppendEscapedString(std::string& output, std::string_view str);
+  static void AppendTimeIso8601(std::string& output, std::chrono::system_clock::time_point tp);
 
-  /** @private
-   *  @brief Экранирует спецсимволы для корректного включения в JSON-строку.
-   *  @param str Строка для экранирования.
-   *  @return Новая строка с экранированными символами.
-   */
-  static std::string EscapeJsonString(std::string_view str);
-
-  /** @private
+  /**
+   * @private
    * @brief Преобразует уровень логирования в строковое представление.
    * @param level Уровень логирования из перечисления LogLevel.
    * @return Строковое представление уровня (например, "INFO").

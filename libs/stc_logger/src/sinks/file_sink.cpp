@@ -30,7 +30,7 @@ FileSink::~FileSink() {
   }
 }
 
-void FileSink::Write(const LogRecord& record,
+void FileSink::Write([[maybe_unused]] const LogRecord& record,
                      std::string_view formatted_message) {
   std::lock_guard<std::mutex> lock(mutex_);
 
