@@ -143,25 +143,23 @@ TEST_F(SignalRouterTest, UnregisterHandler_RemovesHandlers) {
 // =====================================================================
 
 TEST_F(SignalRouterTest, Start_Stop_IsRunning) {
-  MockSystemCalls* mock_ptr = mock_sys_.get();
-  SignalRouter router(std::move(mock_sys_));
+MockSystemCalls* mock_ptr = mock_sys_.get();
+SignalRouter router(std::move(mock_sys_));
 
-  // РАЗРЕШАЕМ фоновому потоку вызывать EpollWait без провала теста
-  EXPECT_CALL(*mock_ptr, EpollWait(_, _, _, _)).WillRepeatedly(Return(0));
-  // РАЗРЕШАЕМ деструктору восстанавливать маску
-  EXPECT_CALL(*mock_ptr, Sigprocmask(2, _, nullptr)).WillRepeatedly(Return(0));
+// РАЗРЕШАЕМ фоновому потоку вызывать Sigprocmask(SIG_BLOCK) при инициализации маски
+EXPECT_CALL(*mock_ptr, Sigprocmask(SIG_BLOCK, _, nullptr)).WillRepeatedly(Return(0));
+// РАЗРЕШАЕМ фоновому потоку вызывать EpollWait без провала теста
+EXPECT_CALL(*mock_ptr, EpollWait(_, _, _, _)).WillRepeatedly(Return(0));
+// РАЗРЕШАЕМ деструктору восстанавливать маску (SIG_SETMASK)
+EXPECT_CALL(*mock_ptr, Sigprocmask(SIG_SETMASK, _, nullptr)).WillRepeatedly(Return(0));
 
-  EXPECT_FALSE(router.IsRunning());
-
-  router.Start();
-  EXPECT_TRUE(router.IsRunning());
-
-  EXPECT_THROW(router.Start(), std::runtime_error);
-
-  router.Stop();
-  EXPECT_FALSE(router.IsRunning());
-
-  EXPECT_NO_THROW(router.Stop());
+EXPECT_FALSE(router.IsRunning());
+router.Start();
+EXPECT_TRUE(router.IsRunning());
+EXPECT_THROW(router.Start(), std::runtime_error);
+router.Stop();
+EXPECT_FALSE(router.IsRunning());
+EXPECT_NO_THROW(router.Stop());
 }
 
 // =====================================================================

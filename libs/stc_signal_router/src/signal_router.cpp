@@ -12,6 +12,7 @@
 
 #include <cerrno>
 #include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -252,33 +253,67 @@ class SignalRouter::Impl {
   }
 
   /**
-    @private
-    @brief Фоновый цикл мониторинга событий epoll и диспетчеризации сигналов.
-    @param[in] stoken Токен остановки для кооперативного завершения потока.
-    */
+   * @private
+   * @brief Фоновый цикл мониторинга событий epoll и диспетчеризации сигналов.
+   * @param[in] stoken Токен остановки для кооперативного завершения потока.
+   */
   void WorkerLoop(std::stop_token stoken) {
+    // Критическое требование POSIX: поток, читающий из signalfd,
+    // обязан блокировать отслеживаемые сигналы.
+    if (sys_->Sigprocmask(SIG_BLOCK, &blocked_mask_, nullptr) == -1) {
+      // LCOV_EXCL_START
+      std::abort();  // Фатальная ошибка: невозможность изоляции сигналов в
+                     // потоке
+      // LCOV_EXCL_STOP
+    }
+
     int epoll_fd = sys_->EpollCreate1(EPOLL_CLOEXEC);
-    if (epoll_fd == -1) return;
+    if (epoll_fd == -1) {
+      // LCOV_EXCL_START
+      if (signal_fd_ >= 0) {
+        sys_->Close(signal_fd_);
+        signal_fd_ = -1;
+      }
+      std::abort();  // Фатальная ошибка: невозможность создания экземпляра
+                     // epoll
+      // LCOV_EXCL_STOP
+    }
 
     struct epoll_event ev {};
     ev.events = EPOLLIN;
     ev.data.fd = signal_fd_;
-    sys_->EpollCtl(epoll_fd, EPOLL_CTL_ADD, signal_fd_, &ev);
+
+    if (sys_->EpollCtl(epoll_fd, EPOLL_CTL_ADD, signal_fd_, &ev) == -1) {
+      // LCOV_EXCL_START
+      sys_->Close(epoll_fd);
+      if (signal_fd_ >= 0) {
+        sys_->Close(signal_fd_);
+        signal_fd_ = -1;
+      }
+      std::abort();  // Фатальная ошибка: невозможность регистрации дескриптора
+      // LCOV_EXCL_STOP
+    }
 
     struct epoll_event events[10];
     while (!stoken.stop_requested()) {
       int nfds = sys_->EpollWait(epoll_fd, events, 10, 50);
-      if (nfds == -1 && errno == EINTR) continue;
+      if (nfds == -1 && errno == EINTR) {
+        continue;
+      }
 
       for (int i = 0; i < nfds; ++i) {
         if (events[i].data.fd == signal_fd_) {
           struct signalfd_siginfo fdsi;
-          if (sys_->Read(signal_fd_, &fdsi, sizeof(fdsi)) == sizeof(fdsi)) {
+          ssize_t bytes_read = sys_->Read(signal_fd_, &fdsi, sizeof(fdsi));
+          // Защита от частичного чтения (Partial Read), задокументированная в
+          // SR_summary.md
+          if (bytes_read == sizeof(fdsi)) {
             Dispatch(fdsi.ssi_signo);
           }
         }
       }
     }
+
     sys_->Close(epoll_fd);
   }
 
