@@ -1,160 +1,142 @@
 /**
- * @page page_architecture Архитектура библиотеки
- * @brief Фундаментальные принципы, паттерны проектирования и структурная организация подсистемы логирования.
+ * @page page_architecture Архитектура библиотеки stc::logger
  *
- * @section arch_principles Базовые архитектурные принципы
- * Библиотека спроектирована с опорой на следующие фундаментальные принципы:
- * - **Разделение ответственности (Separation of Concerns)**: Логика принятия 
- *   решений (когда ротировать, как форматировать, что фильтровать) строго 
- *   отделена от логики физического ввода-вывода (запись в файл, консоль).
- * - **Инверсия зависимостей (Dependency Inversion)**: Ядро (@ref group_logger_core) 
- *   зависит исключительно от абстракций (интерфейсов). Конкретные реализации 
- *   приемников, форматтеров и стратегий инжектируются на этапе конфигурации.
- * - **Иммутабельность конфигурации**: Объекты стратегий и форматтеров, будуч 
- *   созданными, не изменяют своего состояния. Это гарантирует их 
- *   потокобезопасность и возможность безопасного переиспользования между 
- *   различными приемниками.
+ * @brief Высокоуровневая архитектура, принципы проектирования, оптимизация 
+ * "горячего" пути и механизмы отказоустойчивости подсистемы логирования.
  *
- * @section arch_patterns Паттерны проектирования
- * В основе реализации лежат следующие паттерны:
- * - **Стратегия (Strategy)**: Используется для инкапсуляции алгоритмов ротации 
- *   (@ref group_logger_rotation), форматирования (@ref group_formatting) и 
- *   фильтрации (@ref group_logger_filtering). Позволяет изменять поведение 
- *   приемников без модификации их исходного кода.
- * - **Производитель-Потребитель (Producer-Consumer)**: Реализован в 
- *   @ref stc::logger::AsyncFileSink. Вызывающий поток (Producer) помещает 
- *   сообщения в lock-free очередь, а выделенный фоновый поток (Consumer) 
- *   осуществляет пакетную запись (batching) на диск.
- * - **Диспетчер (Dispatcher)**: Класс @ref stc::logger::Logger выступает в роли 
- *   центрального узла маршрутизации, обеспечивая потокобезопасную итерацию 
- *   по зарегистрированным приемникам и применение глобальных фильтров.
+ * @section arch_overview Общие принципы и Инверсия Зависимостей (DIP)
+ * Библиотека @c stc::logger спроектирована как набор слабосвязанных компонентов, 
+ * взаимодействующих исключительно через абстрактные интерфейсы. Это реализует 
+ * принцип Dependency Inversion (DIP) и позволяет бизнес-логике хост-приложения 
+ * (например, сервиса @c xmlfilter) не зависеть от конкретных реализаций 
+ * приемников, форматтеров или фильтров.
+ * 
+ * Ключевые архитектурные инварианты:
+ * - @b Горячий путь (Hot Path): Метод @c Logger::Log, а также фильтры и 
+ *   форматтеры оптимизированы для минимальной задержки. Запрещены системные 
+ *   вызовы, лишние аллокации и блокировки внутри конвейера форматирования.
+ * - @b Изоляция исключений (Exception Isolation): Публичный контракт диспетчера 
+ *   строго @c noexcept. Любые сбои в фильтрах, форматтерах или Sink'ах 
+ *   перехватываются и маршрутизируются, предотвращая вызов @c std::terminate.
+ * - @b Отказоустойчивость (Fault Tolerance): Подсистема ввода-вывода 
+ *   инкапсулирует обработку ошибок файловой системы (@c ENOSPC, @c EACCES) 
+ *   и реализует механизм самовосстановления (Self-Healing) без прерывания 
+ *   бизнес-потоков.
  *
  * @section arch_diagram Диаграмма классов
- * Ниже представлена диаграмма классов, отражающая ключевые взаимосвязи 
- * между ядром, приемниками, стратегиями ротации, форматтерами и фильтрами.
- * 
  * @dot
- * digraph LoggerArchitecture {
- *   rankdir=LR;
- *   node [shape=record, fontname="Helvetica", fontsize=10, style=filled, fillcolor="#f5f5f5"];
- *   edge [fontname="Helvetica", fontsize=9];
- *   graph [fontname="Helvetica", label="Архитектура подсистемы логирования stc::logger", fontsize=14];
+ * digraph stc_logger_arch {
+ *     rankdir=TB;
+ *     splines=ortho;
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
  *
- *   // --- Ядро (Core) ---
- *   subgraph cluster_core {
- *     label="Core (Ядро)";
- *     style=dashed;
- *     color="#4a90e2";
- *     Logger       [label="{Logger|+ Instance()\l+ AddSink()\l+ SetFilter()\l+ Log()\l}"];
- *     LogRecord    [label="{LogRecord|+ level\l+ timestamp\l+ source\l+ message\l}"];
- *     ILogSink     [label="{\<\<interface\>\>\nILogSink|+ Write()\l+ Flush()\l}"];
- *     ILogFormatter[label="{\<\<interface\>\>\nILogFormatter|+ Format()\l}"];
- *     ILogFilter   [label="{\<\<interface\>\>\nILogFilter|+ ShouldLog()\l}"];
- *   }
+ *     // Interfaces
+ *     node [style=dashed, color=gray];
+ *     ILogger [label="«interface»\nILogger"];
+ *     ILogFilter [label="«interface»\nILogFilter"];
+ *     ILogFormatter [label="«interface»\nILogFormatter"];
+ *     ILogSink [label="«interface»\nILogSink"];
+ *     IRotationPolicy [label="«interface»\nIRotationPolicy"];
  *
- *   // --- Приемники (Sinks) ---
- *   subgraph cluster_sinks {
- *     label="Sinks (Приемники)";
- *     style=dashed;
- *     color="#7ed321";
- *     ConsoleSink   [label="{ConsoleSink}"];
- *     FileSink      [label="{FileSink|- file_stream_\l- current_size_\l- mutex_\l}"];
- *     AsyncFileSink [label="{AsyncFileSink|- worker_thread_\l- queue_\l- queue_cv_\l}"];
- *   }
+ *     // Implementations
+ *     node [style=solid, color=black];
+ *     Logger [label="Logger\n(Dispatcher)"];
+ *     CompositeFilter [label="CompositeFilter"];
+ *     TextFormatter [label="TextFormatter"];
+ *     JsonFormatter [label="JsonFormatter"];
+ *     XmlFormatter [label="XmlFormatter"];
+ *     FileSink [label="FileSink\n(Sync)"];
+ *     AsyncFileSink [label="AsyncFileSink\n(Async)"];
+ *     SizeRotation [label="SizeRotationPolicy"];
+ *     TimeRotation [label="TimeRotationPolicy"];
  *
- *   // --- Стратегии ротации (Rotation) ---
- *   subgraph cluster_rotation {
- *     label="Rotation (Стратегии ротации)";
- *     style=dashed;
- *     color="#f5a623";
- *     IRotationPolicy       [label="{\<\<interface\>\>\nIRotationPolicy|+ ShouldRotate()\l+ GenerateRotatedFileName()\l+ OnRotationCompleted()\l}"];
- *     SizeRotationPolicy    [label="{SizeRotationPolicy|- max_size_bytes_\l- max_archives_\l}"];
- *     TimeRotationPolicy    [label="{TimeRotationPolicy|- interval_\l- next_rotation_time_\l- mutex_\l}"];
- *     CircularRotationPolicy[label="{CircularRotationPolicy|- max_size_bytes_\l- max_archives_\l- next_index_ (atomic)\l}"];
- *   }
+ *     // Layout constraints
+ *     {rank=same; ILogFilter; ILogFormatter; ILogSink;}
+ *     {rank=same; FileSink; AsyncFileSink;}
+ *     {rank=same; TextFormatter; JsonFormatter; XmlFormatter;}
  *
- *   // --- Форматтеры (Formatting) ---
- *   subgraph cluster_formatting {
- *     label="Formatting (Форматирование)";
- *     style=dashed;
- *     color="#bd10e0";
- *     TextFormatter [label="{TextFormatter}"];
- *     JsonFormatter [label="{JsonFormatter}"];
- *     XmlFormatter  [label="{XmlFormatter}"];
- *   }
- *
- *   // --- Фильтры (Filtering) ---
- *   subgraph cluster_filtering {
- *     label="Filtering (Фильтрация)";
- *     style=dashed;
- *     color="#d0021b";
- *     LevelFilter  [label="{LevelFilter}"];
- *     SourceFilter [label="{SourceFilter}"];
- *   }
- *
- *   // --- Наследование (реализация интерфейсов) ---
- *   edge [dir=back, arrowtail=empty, color="#333333"];
- *   ConsoleSink   -> ILogSink;
- *   FileSink      -> ILogSink;
- *   AsyncFileSink -> ILogSink;
- *
- *   SizeRotationPolicy     -> IRotationPolicy;
- *   TimeRotationPolicy     -> IRotationPolicy;
- *   CircularRotationPolicy -> IRotationPolicy;
- *
- *   TextFormatter -> ILogFormatter;
- *   JsonFormatter -> ILogFormatter;
- *   XmlFormatter  -> ILogFormatter;
- *
- *   LevelFilter  -> ILogFilter;
- *   SourceFilter -> ILogFilter;
- *
- *   // --- Композиция и агрегация (shared_ptr зависимости) ---
- *   edge [dir=forward, arrowhead=diamond, style=dashed, color="#666666"];
- *   Logger -> ILogSink     [label="1..*"];
- *   Logger -> ILogFilter   [label="0..1\n(global)"];
- *
- *   FileSink      -> ILogFormatter;
- *   FileSink      -> ILogFilter      [label="0..1\n(local)"];
- *   FileSink      -> IRotationPolicy [label="0..1"];
- *
- *   AsyncFileSink -> ILogFormatter;
- *   AsyncFileSink -> ILogFilter      [label="0..1\n(local)"];
- *   AsyncFileSink -> IRotationPolicy [label="0..1"];
- *
- *   ConsoleSink   -> ILogFormatter;
- *
- *   // --- Использование LogRecord ---
- *   edge [dir=forward, arrowhead=open, style=dotted, color="#999999"];
- *   Logger    -> LogRecord [label="creates"];
- *   ILogSink  -> LogRecord [label="consumes"];
- *   ILogFormatter -> LogRecord [label="serializes"];
- *   ILogFilter    -> LogRecord [label="inspects"];
+ *     // Relationships
+ *     Logger -> ILogFilter [label="evaluates"];
+ *     Logger -> ILogFormatter [label="formats"];
+ *     Logger -> ILogSink [label="writes to"];
+ *     
+ *     // Реализация интерфейсов (arrowhead=empty для UML-совместимости)
+ *     CompositeFilter -> ILogFilter [arrowhead=empty];
+ *     TextFormatter -> ILogFormatter [arrowhead=empty];
+ *     JsonFormatter -> ILogFormatter [arrowhead=empty];
+ *     XmlFormatter -> ILogFormatter [arrowhead=empty];
+ *     
+ *     FileSink -> ILogSink [arrowhead=empty];
+ *     AsyncFileSink -> ILogSink [arrowhead=empty];
+ *     
+ *     // Агрегация/Использование
+ *     FileSink -> IRotationPolicy [label="uses", constraint=false];
+ *     AsyncFileSink -> IRotationPolicy [label="uses", constraint=false];
+ *     SizeRotation -> IRotationPolicy [arrowhead=empty];
+ *     TimeRotation -> IRotationPolicy [arrowhead=empty];
  * }
  * @enddot
  *
- * @section arch_sync_async Синхронная и асинхронная модели ввода-вывода
- * Библиотека предоставляет две взаимодополняющие модели доставки логов:
- * 1. **Синхронная модель** (@ref stc::logger::FileSink): 
- *    Гарантирует строгий порядок и немедленную передачу данных в буферы ОС. 
- *    Блокирует вызывающий поток. Применяется в сценариях, где потеря 
- *    последних строк лога при аварийном завершении (crash) недопустима, 
- *    а интенсивность логирования умеренная.
- * 2. **Асинхронная модель** (@ref stc::logger::AsyncFileSink): 
- *    Обеспечивает минимальную задержку (latency) в бизнес-потоках за счет 
- *    переноса операций I/O в фоновый поток. Применяется в высоконагруженных 
- *    системах (HighLoad), где пропускная способность и отсутствие блокировок 
- *    критичнее, чем гарантия доставки каждого байта при внезапном отказе 
- *    оборудования (OOM Kill, SIGKILL).
+ * @section arch_dispatcher Диспетчер и Изоляция Исключений
+ * Класс @c Logger является точкой входа и координирует конвейер обработки 
+ * сообщения. Метод @c Logger::Log объявлен со спецификатором @c noexcept.
+ * 
+ * @par Двухуровневый перехват
+ * Внутри метода реализована строгая изоляция:
+ * 1. Перехватывается @c std::exception для логирования стандартных ошибок.
+ * 2. Перехватывается @c ... (Ellipsis) для предотвращения падения хост-приложения 
+ *    при нештатном поведении сторонних компонентов или повреждении памяти.
+ * Это гарантирует, что сбой в одном из Sink'ов или форматтеров никогда не 
+ * обрушит основной бизнес-процесс.
  *
- * @section arch_thread_safety Потокобезопасность и управление ресурсами
- * - **RAII**: Все файловые дескрипторы и фоновые потоки управляются через 
- *   механизмы RAII. Деструктор @ref stc::logger::AsyncFileSink гарантирует 
- *   корректное завершение (graceful shutdown) фонового потока и сброс 
- *   очереди на диск благодаря использованию `std::jthread` и `std::stop_token`.
- * - **Гранулярность блокировок**: В синхронных приемниках мьютекс защищает 
- *   только файловый поток и счетчик размера. В асинхронных приемниках 
- *   используются раздельные мьютексы и condition variables для очереди 
- *   данных и механизма принудительного сброса (Flush), что предотвращает 
- *   взаимные блокировки (deadlocks).
+ * @section arch_hotpath Оптимизация "Горячего" Пути
+ * Конвейер фильтрации и форматирования выполняется синхронно в потоке 
+ * бизнес-логики до передачи сообщения в Sink. Для обеспечения микросекундной 
+ * задержки применяются следующие техники:
+ * - @b Zero-Allocation: Методы маппинга уровней логирования возвращают 
+ *   @c std::string_view, ссылаясь на строковые литералы со статическим 
+ *   сроком жизни.
+ * - @b Short-Circuit Evaluation: @c CompositeFilter прекращает итерацию 
+ *   при первом полученном @c false, избегая вызова "тяжелых" фильтров.
+ * - @b In-place Appending & Chunk Copying: Форматтеры (@c JsonFormatter, 
+ *   @c XmlFormatter, @c TextFormatter) не создают промежуточных строк. 
+ *   Они используют предварительное резервирование (@c reserve) и блочное 
+ *   копирование непрерывных участков текста через @c std::string::append, 
+ *   позволяя стандартной библиотеке использовать @c memcpy.
+ *
+ * @section arch_sinks Подсистема Приемников (Sinks) и Отказоустойчивость
+ * Подсистема ввода-вывода абстрагирована от бизнес-логики и инкапсулирует 
+ * работу с файловой системой ОС.
+ * 
+ * @par Синхронный FileSink
+ * Предназначен для сценариев, где критична гарантия немедленной записи. 
+ * Использует атомарное добавление (@c std::ios::app) и отслеживает размер 
+ * файла в оперативной памяти (@c current_size_), полностью исключая 
+ * дорогостоящие системные вызовы @c stat() в горячем пути.
+ * 
+ * @par Асинхронный AsyncFileSink
+ * Реализует паттерн Producer-Consumer на базе @c std::jthread (C++20).
+ * - @b Batching: Пакетная запись снижает количество системных вызовов 
+ *   @c write() и контекстных переключений ядра ОС.
+ * - @b OverflowPolicy: Явное управление переполнением очереди (@c kDrop, 
+ *   @c kFailFast, @c kBlock) предотвращает неограниченный рост потребления 
+ *   памяти (OOM) при всплесках логирования.
+ * - @b Barrier Flush: Метод @c Flush использует барьерную синхронизацию 
+ *   через @c notify_all, гарантируя физический сброс буферов в ядро ОС 
+ *   без гонок данных.
+ *
+ * @par Self-Healing и ErrorCallback
+ * Оба приемника реализуют механизм самовосстановления. При возникновении 
+ * ошибок файловой системы (например, временная потеря прав @c EACCES или 
+ * переполнение диска @c ENOSPC) объект не прерывает работу и не выбрасывает 
+ * исключений. Ошибка маршрутизируется через пользовательский @c ErrorCallback, 
+ * а фоновый или синхронный поток периодически предпринимает попытки 
+ * повторного открытия дескриптора. Это критически важно для сервисов, 
+ * управляемых через @c systemd, где требуется непрерывная работа даже 
+ * при временных сбоях дисковой подсистемы.
+ *
+ * @section arch_links Связанные документы
+ * @li @ref page_build_system — цели CMake и интеграция через FetchContent
+ * @li @ref page_testing — методология верификации и проверки памяти
  */

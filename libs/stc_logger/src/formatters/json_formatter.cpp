@@ -1,3 +1,10 @@
+/**
+ * @file json_formatter.cpp
+ * @brief Реализация JSON-форматтера логов.
+ * @version 3.1.0
+ * @author Artem Ulyanov (aka s21::provemet)
+ * @date 2026-07-26
+ */
 #include "stc/logger/formatters/json_formatter.hpp"
 
 #include <cstdio>
@@ -8,11 +15,11 @@ namespace stc::logger {
 
 std::string JsonFormatter::Format(const LogRecord& record) const {
   std::string output;
-  
-  output.reserve(256 + record.message.size() + 
-                 std::string_view(record.location.file_name()).size() + 
+
+  output.reserve(256 + record.message.size() +
+                 std::string_view(record.location.file_name()).size() +
                  std::string_view(record.location.function_name()).size());
-  
+
   output.append("{\"timestamp\":\"");
   AppendTimeIso8601(output, record.timestamp);
   output.append("\",\"level\":\"");
@@ -34,13 +41,14 @@ void JsonFormatter::AppendTimeIso8601(
   std::time_t t = std::chrono::system_clock::to_time_t(tp);
   std::tm tm{};
   localtime_r(&t, &tm);
-  
+
   char buffer[32];
   std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &tm);
   output.append(buffer);
-  
+
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                tp.time_since_epoch()) % 1000;
+                tp.time_since_epoch()) %
+            1000;
   output.push_back('.');
   if (ms.count() < 10) {
     output.append("00");
@@ -50,7 +58,8 @@ void JsonFormatter::AppendTimeIso8601(
   output.append(std::to_string(ms.count()));
 }
 
-void JsonFormatter::AppendEscapedString(std::string& output, std::string_view str) {
+void JsonFormatter::AppendEscapedString(std::string& output,
+                                        std::string_view str) {
   std::size_t start = 0;
   for (std::size_t i = 0; i < str.size(); ++i) {
     const char c = str[i];
@@ -59,18 +68,33 @@ void JsonFormatter::AppendEscapedString(std::string& output, std::string_view st
       if (i > start) {
         output.append(str.data() + start, i - start);
       }
-      
+
       switch (c) {
-        case '"':  output.append("\\\""); break;
-        case '\\': output.append("\\\\"); break;
-        case '\b': output.append("\\b");  break;
-        case '\f': output.append("\\f");  break;
-        case '\n': output.append("\\n");  break;
-        case '\r': output.append("\\r");  break;
-        case '\t': output.append("\\t");  break;
+        case '"':
+          output.append("\\\"");
+          break;
+        case '\\':
+          output.append("\\\\");
+          break;
+        case '\b':
+          output.append("\\b");
+          break;
+        case '\f':
+          output.append("\\f");
+          break;
+        case '\n':
+          output.append("\\n");
+          break;
+        case '\r':
+          output.append("\\r");
+          break;
+        case '\t':
+          output.append("\\t");
+          break;
         default: {
           char hex[8];
-          std::snprintf(hex, sizeof(hex), "\\u%04x", static_cast<unsigned char>(c));
+          std::snprintf(hex, sizeof(hex), "\\u%04x",
+                        static_cast<unsigned char>(c));
           output.append(hex);
           break;
         }
@@ -78,7 +102,7 @@ void JsonFormatter::AppendEscapedString(std::string& output, std::string_view st
       start = i + 1;
     }
   }
-  
+
   if (start < str.size()) {
     output.append(str.data() + start, str.size() - start);
   }
@@ -86,13 +110,20 @@ void JsonFormatter::AppendEscapedString(std::string& output, std::string_view st
 
 std::string_view JsonFormatter::LevelToString(LogLevel level) {
   switch (level) {
-    case LogLevel::kTrace:    return "TRACE";
-    case LogLevel::kDebug:    return "DEBUG";
-    case LogLevel::kInfo:     return "INFO";
-    case LogLevel::kWarning:  return "WARNING";
-    case LogLevel::kError:    return "ERROR";
-    case LogLevel::kCritical: return "CRITICAL";
-    default:                  return "UNKNOWN";
+    case LogLevel::kTrace:
+      return "TRACE";
+    case LogLevel::kDebug:
+      return "DEBUG";
+    case LogLevel::kInfo:
+      return "INFO";
+    case LogLevel::kWarning:
+      return "WARNING";
+    case LogLevel::kError:
+      return "ERROR";
+    case LogLevel::kCritical:
+      return "CRITICAL";
+    default:
+      return "UNKNOWN";
   }
 }
 

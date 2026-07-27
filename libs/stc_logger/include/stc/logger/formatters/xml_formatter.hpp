@@ -1,9 +1,9 @@
 /**
  * @file xml_formatter.hpp
  * @brief Объявление форматтера логов в формате XML (NDXML).
- * @version 3.0.0
+ * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
- * @date 2026-07-17
+ * @date 2026-07-26
  */
 
 #pragma once
@@ -36,8 +36,22 @@ class XmlFormatter final : public ILogFormatter {
   std::string Format(const LogRecord& record) const override;
 
  private:
+  /**
+   * @private
+   * @brief Добавляет экранированную строку в целевой буфер.
+   * @param output Целевой буфер, в который будет выполнена дозапись (In-place Appending).
+   * @param str Исходная строка для экранирования согласно спецификации XML 1.0.
+   */
   static void AppendEscapedString(std::string& output, std::string_view str);
-  static void AppendTimeIso8601(std::string& output, std::chrono::system_clock::time_point tp);
+
+  /**
+   * @private
+   * @brief Добавляет временную метку в формате ISO 8601 в целевой буфер.
+   * @param output Целевой буфер, в который будет выполнена дозапись.
+   * @param tp Системное время для форматирования (UTC, с миллисекундной точностью).
+   */
+  static void AppendTimeIso8601(std::string& output,
+                                std::chrono::system_clock::time_point tp);
 
   /**
    * @private

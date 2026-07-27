@@ -1,6 +1,16 @@
+/**
+ * @file logger.cpp
+ * @brief Реализация класса Logger
+ * 
+ * @author Artem Ulyanov
+ * @version 3.1.0
+ * @author Artem Ulyanov (aka s21::provemet)
+ * @date 2026-07-26
+ */
 #include "stc/logger/logger.hpp"
 
 #include <chrono>
+#include <iostream>
 #include <mutex>
 #include <shared_mutex>
 #include <stdexcept>
@@ -30,39 +40,51 @@ void Logger::AddGlobalFilter(std::shared_ptr<ILogFilter> filter) {
 }
 
 void Logger::Log(LogLevel level, std::string_view message,
-                 std::source_location location) {
-  // 1. Формируем запись лога.
-  LogRecord record{std::chrono::system_clock::now(), level,
-                   std::string(message), location};
+                 std::source_location location) noexcept {
+  try {
+    // 1. Формируем запись лога.
+    LogRecord record{std::chrono::system_clock::now(), level,
+                     std::string(message), location};
 
-  // 2. Захватываем мьютекс в режиме чтения (shared_lock).
-  std::shared_lock lock(mutex_);
+    // 2. Захватываем мьютекс в режиме чтения (shared_lock).
+    std::shared_lock lock(mutex_);
 
-  // 3. Проверка глобальных фильтров (Short-circuit evaluation).
-  for (const auto& filter : global_filters_) {
-    if (!filter->ShouldPass(record)) {
-      return;
-    }
-  }
-
-  // 4. Диспетчеризация по Sink'ам
-  for (const auto& sink : sinks_) {
-    // 4.1. Проверка локального фильтра Sink'а
-    auto sink_filter = sink->GetFilter();
-    if (sink_filter && !sink_filter->ShouldPass(record)) {
-      continue;  // Фильтр Sink'а отклонил сообщение
+    // 3. Проверка глобальных фильтров (Short-circuit evaluation).
+    for (const auto& filter : global_filters_) {
+      if (!filter->ShouldPass(record)) {
+        return;
+      }
     }
 
-    // 4.2. Форматирование сообщения специфичным для Sink'а форматтером
-    auto formatter = sink->GetFormatter();
-    if (!formatter) {
-      continue;  // Нарушение контракта, но мы не должны падать
+    // 4. Диспетчеризация по Sink'ам
+    for (const auto& sink : sinks_) {
+      try {
+        // 4.1. Проверка локального фильтра Sink'а
+        auto sink_filter = sink->GetFilter();
+        if (sink_filter && !sink_filter->ShouldPass(record)) {
+          continue;  // Фильтр Sink'а отклонил сообщение
+        }
+
+        // 4.2. Форматирование сообщения специфичным для Sink'а форматтером
+        auto formatter = sink->GetFormatter();
+        if (!formatter) {
+          continue;  // Нарушение контракта, но мы не должны падать
+        }
+
+        std::string formatted_msg = formatter->Format(record);
+
+        // 4.3. Физическая запись
+        sink->Write(record, formatted_msg);
+      } catch (const std::exception& e) {
+        std::cerr << "[Logger ERROR] Sink processing failed: " << e.what() << "\n";
+      } catch (...) {
+        std::cerr << "[Logger ERROR] Sink processing failed with unknown exception\n";
+      }
     }
-
-    std::string formatted_msg = formatter->Format(record);
-
-    // 4.3. Физическая запись
-    sink->Write(record, formatted_msg);
+  } catch (const std::exception& e) {
+    std::cerr << "[Logger ERROR] Global routing failed: " << e.what() << "\n";
+  } catch (...) {
+    std::cerr << "[Logger ERROR] Global routing failed with unknown exception\n";
   }
 }
 

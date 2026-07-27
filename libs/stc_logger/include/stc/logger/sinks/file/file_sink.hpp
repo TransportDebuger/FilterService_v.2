@@ -1,9 +1,9 @@
 /**
  * @file file_sink.hpp
  * @brief Объявление файлового приемника (Sink) с поддержкой ротации логов.
- * @version 3.0.0
+ * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
- * @date 2026-07-17
+ * @date 2026-07-26
  */
 
 #pragma once
@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <functional>
 
 #include "stc/logger/core/ilog_filter.hpp"
 #include "stc/logger/core/ilog_formatter.hpp"
@@ -22,6 +23,14 @@
 namespace stc::logger {
 
 /**
+@brief Тип обратного вызова для уведомления об ошибках ввода-вывода.
+@param ec Код ошибки файловой системы.
+@param context Контекст возникновения ошибки (например, "OpenFile").
+@since 3.1.0
+*/
+using ErrorCallback = std::function<void(const std::error_code& ec, std::string_view context)>;
+
+/**
  * @class FileSink
  * @brief Приемник (Sink) для синхронной записи логов в файл с поддержкой
  * ротации.
@@ -29,18 +38,18 @@ namespace stc::logger {
 class FileSink final : public ILogSink {
  public:
   /**
-   * @brief Конструктор файлового приемника.
-   * @param file_path Путь к лог-файлу.
-   * @param formatter Форматтер для сериализации LogRecord (не может быть
-   * nullptr).
-   * @param filter Опциональный локальный фильтр для этого приемника.
-   * @param rotation_policy Опциональная стратегия ротации. Если nullptr,
-   * ротация не выполняется.
-   * @throw std::invalid_argument Если formatter равен nullptr.
-   */
+  @brief Конструктор файлового приемника.
+  @param file_path Путь к лог-файлу.
+  @param formatter Форматтер для сериализации LogRecord (не может быть nullptr).
+  @param filter Опциональный локальный фильтр для этого приемника.
+  @param rotation_policy Опциональная стратегия ротации. Если nullptr, ротация не выполняется.
+  @param error_callback Опциональный callback для уведомлений об ошибках I/O.
+  @throw std::invalid_argument Если formatter равен nullptr.
+  */
   FileSink(std::string file_path, std::shared_ptr<ILogFormatter> formatter,
            std::shared_ptr<ILogFilter> filter = nullptr,
-           std::shared_ptr<IRotationPolicy> rotation_policy = nullptr);
+           std::shared_ptr<IRotationPolicy> rotation_policy = nullptr,
+           ErrorCallback error_callback = nullptr);
 
   ~FileSink() override;
 
@@ -91,9 +100,10 @@ class FileSink final : public ILogSink {
   /// @private
   std::string file_path_;  ///< Путь к лог-файлу.
 
-  /// @private
-  std::shared_ptr<ILogFormatter>
-      formatter_;  ///< Форматтер для сериализации записей.
+  /** @private
+   * @brief Форматтер для сериализации записей.
+   */
+  std::shared_ptr<ILogFormatter> formatter_;
 
   /// @private
   std::shared_ptr<ILogFilter> filter_;  ///< Локальный фильтр приемника.
@@ -101,6 +111,9 @@ class FileSink final : public ILogSink {
   /// @private
   std::shared_ptr<IRotationPolicy>
       rotation_policy_;  ///< Стратегия ротации (может быть nullptr).
+  
+  /// @private
+  ErrorCallback error_callback_;
 
   /// @private
   std::ofstream file_stream_;  ///< Поток файлового ввода-вывода.

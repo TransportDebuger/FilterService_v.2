@@ -3,17 +3,18 @@
  * 
  * @section build_overview Общие положения
  * Библиотека stc::logger использует систему сборки CMake (минимальная версия 3.20). 
- * Проект строго требует поддержки стандарта C++20 (в частности, `std::jthread` и 
- * `std::stop_token`). Целевой операционной системой является Linux (POSIX).
+ * Проект строго требует поддержки стандарта C++20 (в частности, @c std::jthread и 
+ * @c std::stop_token). Целевой операционной системой является Linux (POSIX).
  * 
  * Система сборки предоставляет набор специализированных целей (targets) для 
- * комплексного тестирования, статического анализа и генерации отчетов о покрытии.
+ * комплексного тестирования, статического анализа, профилирования и генерации 
+ * отчетов о покрытии.
  * 
  * @section build_cmake CMake
  * 
  * @subsection cmake_overview Обзор
  * CMake предоставляет кроссплатформенный подход к сборке с двухэтапным процессом: 
- * конфигурация и сборка. CMakeLists.txt генерирует файлы сборки для выбранной 
+ * конфигурация и сборка. @c CMakeLists.txt генерирует файлы сборки для выбранной 
  * системы (Make, Ninja и др.).
  * 
  * @subsection cmake_configuration Конфигурация проекта
@@ -23,6 +24,8 @@
  * @par Доступные опции конфигурации:
  * @li @b STC_LOGGER_BUILD_TESTS: Сборка юнит- и интеграционных тестов (GoogleTest). 
  *     По умолчанию: @c ON.
+ * @li @b STC_LOGGER_BUILD_BENCHMARKS: Сборка бенчмарков производительности 
+ *     (Google Benchmark). По умолчанию: @c OFF.
  * @li @b STC_LOGGER_ENABLE_COVERAGE: Включение флагов покрытия кода (@c --coverage). 
  *     По умолчанию: @c OFF.
  * @li @b STC_LOGGER_ENABLE_SANITIZERS: Включение AddressSanitizer (ASan) и 
@@ -83,6 +86,16 @@
  * cmake --build build --target integr-test
  * @endcode
  * 
+ * @par cmake --build build --target benchmark-test
+ * Компиляция и запуск бенчмарков производительности с использованием Google Benchmark. 
+ * Для получения репрезентативных метрик конфигурацию необходимо выполнять с типом 
+ * сборки @c Release (или @c RelWithDebInfo), так как в @c Debug-режиме результаты 
+ * будут искажены отсутствием оптимизаций и дополнительными проверками санитайзеров.
+ * @code{.bash}
+ * cmake -B build_bench -DCMAKE_BUILD_TYPE=Release -DSTC_LOGGER_BUILD_BENCHMARKS=ON
+ * cmake --build build_bench --target benchmark-test
+ * @endcode
+ * 
  * @par cmake --build build --target gcov-report
  * Генерация HTML-отчета о покрытии кода тестами с использованием @c lcov и 
  * @c genhtml. Отчет сохраняется в @c build/coverage_report/.
@@ -93,6 +106,8 @@
  * @par cmake --build build --target test-all
  * Запуск полного цикла верификации в строгой последовательности:
  * @c linter-test -> @c unit-test -> @c mem-test -> @c integr-test -> @c gcov-report.
+ * @note Бенчмарки (@c benchmark-test) намеренно исключены из @c test-all, так как 
+ * они требуют @c Release-сборки и не являются частью стандартного цикла CI/CD.
  * @code{.bash}
  * cmake --build build --target test-all
  * @endcode
@@ -106,8 +121,35 @@
  * cmake --build build --target docs
  * @endcode
  * @note Если Doxygen не найден при конфигурации CMake, выполнение цели 
- * завершится фатальной ошибкой.
+ * завершится фатальной ошибкой (Fail-Fast).
  * 
+ * @section build_integration Интеграция в хост-проекты (FetchContent)
+ * При подключении библиотеки к основному проекту (например, бизнес-сервису 
+ * @c xmlfilter) через механизм @c FetchContent, необходимо принудительно 
+ * отключать сборку тестов, бенчмарков и санитайзеров @c stc::logger. 
+ * Это предотвращает конфликты версий GoogleTest/GoogleBenchmark и засорение 
+ * графа целей CMake хост-приложения.
+ * 
+ * @par Пример конфигурации CMakeLists.txt хост-проекта:
+ * @code{.cmake}
+ * # Принудительное отключение инфраструктурных целей библиотеки
+ * set(STC_LOGGER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+ * set(STC_LOGGER_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+ * set(STC_LOGGER_ENABLE_COVERAGE OFF CACHE BOOL "" FORCE)
+ * set(STC_LOGGER_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+ * 
+ * include(FetchContent)
+ * FetchContent_Declare(
+ *     stc_logger
+ *     GIT_REPOSITORY https://github.com/your_org/stc_logger.git
+ *     GIT_TAG        v3.1.0
+ * )
+ * FetchContent_MakeAvailable(stc_logger)
+ * 
+ * # Линковка с бизнес-логикой
+ * target_link_libraries(your_target PRIVATE stc::logger)
+ * @endcode
+ *
  * @section build_ci Интеграция с CI/CD
  * 
  * @subsection ci_github GitHub Actions
@@ -138,7 +180,7 @@
  *           clang-format \
  *           cppcheck \
  *           valgrind \
- *           lcov \
+ *           lcov
  *     
  *     - name: Configure CMake
  *       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DSTC_LOGGER_BUILD_TESTS=ON
@@ -202,6 +244,5 @@
  * 
  * @section build_links Связанные документы
  * @li @ref page_architecture — общая архитектура библиотеки и диаграмма классов
- * @li @ref page_build_and_integration — требования к окружению и интеграция в сторонние проекты
  * @li @ref page_testing — методология тестирования и верификации
  */

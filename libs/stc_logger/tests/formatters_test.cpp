@@ -243,17 +243,20 @@ TEST(FormattersTest, XmlFormatter_EscapeSpecialChars) {
 
 TEST(FormattersTest, XmlFormatter_EscapeControlChars) {
   XmlFormatter fmt;
-  // Сообщение с недопустимыми в XML управляющими символами ASCII < 0x20 
+  // Сообщение с недопустимыми в XML управляющими символами ASCII < 0x20
   // (кроме \t, \n, \r, которые должны остаться без изменений)
   std::string msg = "Valid:\t\n\r Invalid:\x01\x0B\x1F";
   auto record = MakeRecord(LogLevel::kDebug, msg);
   std::string result = fmt.Format(record);
-  
+
   // Проверка, что недопустимые символы преобразованы в числовые ссылки
-  EXPECT_NE(result.find("&#x01;"), std::string::npos) << "0x01 must be escaped as &#x01;";
-  EXPECT_NE(result.find("&#x0B;"), std::string::npos) << "0x0B must be escaped as &#x0B;";
-  EXPECT_NE(result.find("&#x1F;"), std::string::npos) << "0x1F must be escaped as &#x1F;";
-  
+  EXPECT_NE(result.find("&#x01;"), std::string::npos)
+      << "0x01 must be escaped as &#x01;";
+  EXPECT_NE(result.find("&#x0B;"), std::string::npos)
+      << "0x0B must be escaped as &#x0B;";
+  EXPECT_NE(result.find("&#x1F;"), std::string::npos)
+      << "0x1F must be escaped as &#x1F;";
+
   // Проверка, что валидные управляющие символы остались нетронутыми
   // (в NDXML они будут внутри тега <log>...</log>)
   EXPECT_NE(result.find("Valid:\t\n\r Invalid:"), std::string::npos);

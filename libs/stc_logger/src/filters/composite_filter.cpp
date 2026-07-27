@@ -1,3 +1,10 @@
+/**
+ * @file composite_filter.cpp
+ * @brief Реализация композитного фильтра логов.
+ * @version 3.1.0
+ * @author Artem Ulyanov (aka s21::provemet)
+ * @date 2026-07-26
+ */
 #include "stc/logger/filters/composite_filter.hpp"
 
 #include <stdexcept>
@@ -11,7 +18,7 @@ CompositeFilter::CompositeFilter(
     throw std::invalid_argument(
         "CompositeFilter: filters vector cannot be empty");
   }
-  
+
   // Проверка на наличие nullptr среди дочерних фильтров
   if (std::any_of(filters_.begin(), filters_.end(),
                   [](const auto& p) { return p == nullptr; })) {
@@ -29,7 +36,7 @@ bool CompositeFilter::ShouldPass(const LogRecord& record) const {
     }
     return true;
   }
-  
+
   // LogicOperator::kOr
   for (const auto& filter : filters_) {
     if (filter->ShouldPass(record)) {

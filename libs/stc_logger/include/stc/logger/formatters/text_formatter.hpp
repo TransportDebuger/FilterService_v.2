@@ -2,9 +2,9 @@
  * @file text_formatter.hpp
  * @brief Объявление классического текстового форматтера логов на основе
  * шаблонов.
- * @version 3.0.0
+ * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
- * @date 2026-07-17
+ * @date 2026-07-26
  */
 
 #pragma once
@@ -27,9 +27,8 @@ class TextFormatter final : public ILogFormatter {
    * @param pattern Шаблон строки с плейсхолдерами.
    * @param time_format Формат временной метки (совместим с std::strftime).
    */
-  explicit TextFormatter(
-    std::string pattern = "[%time] [%level] %msg\n",
-    std::string time_format = "%Y-%m-%d %H:%M:%S");
+  explicit TextFormatter(std::string pattern = "[%time] [%level] %msg\n",
+                         std::string time_format = "%Y-%m-%d %H:%M:%S");
 
   ~TextFormatter() override = default;
 

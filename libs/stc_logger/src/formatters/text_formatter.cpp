@@ -1,3 +1,10 @@
+/**
+ * @file text_formatter.cpp
+ * @brief Реализация текстового форматтера логов.
+ * @version 3.1.0
+ * @author Artem Ulyanov (aka s21::provemet)
+ * @date 2026-07-17
+ */
 #include "stc/logger/formatters/text_formatter.hpp"
 
 #include <ctime>
@@ -10,7 +17,7 @@ TextFormatter::TextFormatter(std::string pattern, std::string time_format)
 std::string TextFormatter::Format(const LogRecord& record) const {
   std::string output;
   const std::size_t len = pattern_.size();
-  
+
   output.reserve(len + record.message.size() + 64);
 
   std::size_t start = 0;
@@ -64,13 +71,20 @@ std::string TextFormatter::FormatTime(
 
 std::string_view TextFormatter::LevelToString(LogLevel level) {
   switch (level) {
-    case LogLevel::kTrace:    return "TRACE";
-    case LogLevel::kDebug:    return "DEBUG";
-    case LogLevel::kInfo:     return "INFO";
-    case LogLevel::kWarning:  return "WARNING";
-    case LogLevel::kError:    return "ERROR";
-    case LogLevel::kCritical: return "CRITICAL";
-    default:                  return "UNKNOWN";
+    case LogLevel::kTrace:
+      return "TRACE";
+    case LogLevel::kDebug:
+      return "DEBUG";
+    case LogLevel::kInfo:
+      return "INFO";
+    case LogLevel::kWarning:
+      return "WARNING";
+    case LogLevel::kError:
+      return "ERROR";
+    case LogLevel::kCritical:
+      return "CRITICAL";
+    default:
+      return "UNKNOWN";
   }
 }
 

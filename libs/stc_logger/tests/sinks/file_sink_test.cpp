@@ -264,4 +264,32 @@ TEST_F(FileSinkTest, PolymorphicDeletion_CoversDeletingDestructor) {
   delete base_ptr;  // Вызовет Deleting Destructor (D0)
 }
 
+TEST_F(FileSinkTest, ErrorCallback_InvokedOnOpenFailure) {
+  auto formatter = std::make_shared<NiceMock<MockFormatter>>();
+  // Путь в несуществующую директорию гарантированно вызовет ошибку open()
+  fs::path invalid_path = fs::temp_directory_path() / "non_existent_dir_xyz" / "test.log";
+  
+  bool callback_invoked = false;
+  std::error_code captured_ec;
+  std::string captured_context;
+  
+  // Lambda для перехвата аргументов callback
+  auto callback = [&](const std::error_code& ec, std::string_view context) {
+    callback_invoked = true;
+    captured_ec = ec;
+    captured_context = std::string(context);
+  };
+
+  // Конструктор не должен выбрасывать исключение
+  EXPECT_NO_THROW({
+    FileSink sink(invalid_path.string(), formatter, nullptr, nullptr, callback);
+  });
+
+  // Проверка, что callback был вызван и получил валидные данные
+  EXPECT_TRUE(callback_invoked) << "Callback must be invoked on file open failure";
+  EXPECT_TRUE(captured_ec.value() != 0) << "Error code must be non-zero";
+  EXPECT_NE(captured_context.find("Failed to open file"), std::string::npos) 
+      << "Context string must contain 'Failed to open file'";
+}
+
 }  // namespace stc::logger::test

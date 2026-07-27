@@ -1,9 +1,9 @@
 /**
  * @file logger.hpp
  * @brief Объявление класса диспетчеризации и маршрутизации логов.
- * @version 3.0.0
+ * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
- * @date 2026-07-17
+ * @date 2026-07-26
  */
 #pragma once
 
@@ -65,7 +65,7 @@ class Logger final : public ILogger {
    */
   void Log(
       LogLevel level, std::string_view message,
-      std::source_location location = std::source_location::current()) override;
+      std::source_location location = std::source_location::current()) noexcept override;
 
   /**
    * @brief Регистрация сообщения уровня Trace.

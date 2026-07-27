@@ -194,7 +194,20 @@ add_custom_target(integr-test
 )
 
 # ==============================================================================
-# 5. GCOV-REPORT (Генерация отчета о покрытии)
+# 5. BENCHMARK-TEST (Нагрузочное тестирование)
+# ==============================================================================
+add_custom_target(benchmark-test
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Phase 1: Building Benchmarks Release ==="
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/benchmark_build
+    COMMAND ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_SOURCE_DIR} -B ${CMAKE_CURRENT_BINARY_DIR}/benchmark_build -DSTC_LOGGER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/benchmark_build --target stc_logger_benchmarks
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Phase 2: Running Benchmarks ==="
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/benchmark_build/tests/stc_logger_benchmarks --benchmark_min_time=1s --benchmark_out=${CMAKE_CURRENT_BINARY_DIR}/benchmark_results.json --benchmark_out_format=json
+    COMMENT "=== Running Performance Benchmarks Isolated Release Build ==="
+)
+
+# ==============================================================================
+# 6. GCOV-REPORT (Генерация отчета о покрытии)
 # ==============================================================================
 find_program(LCOV_BIN lcov)
 find_program(GENHTML_BIN genhtml)
@@ -218,26 +231,29 @@ else()
 endif()
 
 # ==============================================================================
-# 6. TEST-ALL (Последовательный запуск всех видов тестов)
+# 7. TEST-ALL (Последовательный запуск всех видов тестов)
 # ==============================================================================
 add_custom_target(test-all
     COMMAND ${CMAKE_COMMAND} -E echo "========================================="
     COMMAND ${CMAKE_COMMAND} -E echo "=== RUNNING FULL TEST SUITE [ALL] ==="
     COMMAND ${CMAKE_COMMAND} -E echo "========================================="
     
-    COMMAND ${CMAKE_COMMAND} -E echo "[1/5] Linters..."
+    COMMAND ${CMAKE_COMMAND} -E echo "[1/6] Linters..."
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target linter-test
     
-    COMMAND ${CMAKE_COMMAND} -E echo "[2/5] Unit Tests and Coverage..."
+    COMMAND ${CMAKE_COMMAND} -E echo "[2/6] Unit Tests and Coverage..."
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target unit-test
     
-    COMMAND ${CMAKE_COMMAND} -E echo "[3/5] Memory Tests..."
+    COMMAND ${CMAKE_COMMAND} -E echo "[3/6] Memory Tests..."
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target mem-test
     
-    COMMAND ${CMAKE_COMMAND} -E echo "[4/5] Integration Tests..."
+    COMMAND ${CMAKE_COMMAND} -E echo "[4/6] Integration Tests..."
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target integr-test
     
-    COMMAND ${CMAKE_COMMAND} -E echo "[5/5] Coverage Report..."
+    COMMAND ${CMAKE_COMMAND} -E echo "[5/6] Performance Benchmarks..."
+    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target benchmark-test
+    
+    COMMAND ${CMAKE_COMMAND} -E echo "[6/6] Coverage Report..."
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR} --target gcov-report
     
     COMMAND ${CMAKE_COMMAND} -E echo "========================================="
@@ -246,12 +262,12 @@ add_custom_target(test-all
 )
 
 # ==============================================================================
-# 7. DOCS (Генерация документации Doxygen)
+# 8. DOCS (Генерация документации Doxygen)
 # ==============================================================================
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
     # Предполагается, что конфигурационный файл Doxyfile находится в директории docs/
-    set(DOXYFILE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile)
+    set(DOXYFILE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
     
     add_custom_target(docs
         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_PATH}

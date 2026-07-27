@@ -6,16 +6,30 @@
 
 namespace fs = std::filesystem;
 
+namespace {
+// Вспомогательная функция для маршрутизации ошибок: в callback или в std::cerr
+void ReportError(const std::function<void(const std::error_code&, std::string_view)>& callback,
+                 const std::error_code& ec, std::string_view context) {
+  if (callback) {
+    callback(ec, context);
+  } else {
+    std::cerr << "[FileSink ERROR] " << context << ": " << ec.message() << "\n";
+  }
+}
+}  // namespace
+
 namespace stc::logger {
 
 FileSink::FileSink(std::string file_path,
                    std::shared_ptr<ILogFormatter> formatter,
                    std::shared_ptr<ILogFilter> filter,
-                   std::shared_ptr<IRotationPolicy> rotation_policy)
+                   std::shared_ptr<IRotationPolicy> rotation_policy,
+                   ErrorCallback error_callback)
     : file_path_(std::move(file_path)),
       formatter_(std::move(formatter)),
       filter_(std::move(filter)),
-      rotation_policy_(std::move(rotation_policy)) {
+      rotation_policy_(std::move(rotation_policy)),
+      error_callback_(std::move(error_callback)) {
   if (!formatter_) {
     throw std::invalid_argument("FileSink: formatter cannot be null");
   }
@@ -79,56 +93,45 @@ std::shared_ptr<ILogFilter> FileSink::GetFilter() const noexcept {
 }
 
 void FileSink::OpenFile() {
-  // Используем std::ios::app для дозаписи и std::ios::binary для отключения
-  // трансляции символов (актуально при портировании на Windows) и ускорения
-  // I/O.
   file_stream_.open(file_path_, std::ios::app | std::ios::binary);
-
   if (!file_stream_.is_open()) {
-    std::cerr << "[FileSink ERROR] Failed to open file: " << file_path_ << "\n";
+    ReportError(error_callback_, std::make_error_code(std::io_errc::stream),
+                "Failed to open file: " + file_path_);
     return;
   }
 
-  // Инициализируем текущий размер файла из файловой системы
   std::error_code ec;
   auto size = fs::file_size(file_path_, ec);
-  if (ec) {                // LCOV_EXCL_LINE
-    current_size_ = 0;     // LCOV_EXCL_LINE
-  } else {                 // LCOV_EXCL_LINE
+  if (ec) { // LCOV_EXCL_LINE     
+    ReportError(error_callback_, ec, "Failed to get file size: " + file_path_);  // LCOV_EXCL_LINE
+    current_size_ = 0;  // LCOV_EXCL_LINE
+  } else {  // LCOV_EXCL_LINE
     current_size_ = size;  // LCOV_EXCL_LINE
-  }                        // LCOV_EXCL_LINE
+  }
 }
 
 void FileSink::RotateIfNeeded(std::chrono::system_clock::time_point now) {
   if (!rotation_policy_) {
     return;
   }
-
   if (!rotation_policy_->ShouldRotate(current_size_, now)) {
     return;
   }
 
-  // 1. Закрываем текущий файл
   file_stream_.flush();
   file_stream_.close();
 
-  // 2. Переименование (архивация), если требует политика
   std::string rotated_path;
   if (rotation_policy_->RequiresArchiving()) {
     rotated_path = rotation_policy_->GenerateRotatedFileName(file_path_, now);
-
     std::error_code ec;
     fs::rename(file_path_, rotated_path, ec);
     if (ec) {
-      std::cerr << "[FileSink ERROR] Failed to rename file for rotation: "
-                << ec.message() << "\n";
+      ReportError(error_callback_, ec, "Failed to rename file for rotation");
     }
   }
 
-  // 3. Открываем новый чистый файл
   OpenFile();
-
-  // 4. Уведомляем политику о завершении ротации (для очистки старых архивов)
   rotation_policy_->OnRotationCompleted(file_path_, rotated_path);
 }
 

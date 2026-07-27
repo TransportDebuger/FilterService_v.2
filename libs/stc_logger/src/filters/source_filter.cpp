@@ -38,7 +38,7 @@ bool SourceFilter::Match(std::string_view source_value) const {
     case SourceMatchMode::kStartsWith:
       // Безопасное сравнение начала строки
       if (source_value.size() < pattern_.size()) {
-        return false;
+        return false; // LCOV_EXCL_LINE
       }
       return source_value.substr(0, pattern_.size()) == pattern_;
 

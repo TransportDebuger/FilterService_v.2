@@ -1,9 +1,9 @@
 /**
  * @file ilogger.hpp
  * @brief Определение абстрактного интерфейса диспетчера логирования.
- * @version 3.0.0
+ * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
- * @date 2026-07-17
+ * @date 2026-07-26
  */
 
 #pragma once
@@ -16,7 +16,6 @@
 namespace stc::logger {
 
 /**
- * @class ILogger
  * @brief Абстрактный базовый класс, определяющий контракт для всех реализаций
  * логгеров.
  */
@@ -33,7 +32,7 @@ class ILogger {
    */
   virtual void Log(
       LogLevel level, std::string_view message,
-      std::source_location location = std::source_location::current()) = 0;
+      std::source_location location = std::source_location::current()) noexcept = 0;
 
   /// @brief Регистрация сообщения уровня Trace.
   virtual void Trace(

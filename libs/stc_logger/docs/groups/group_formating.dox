@@ -1,9 +1,4 @@
 /**
- * @file group_formatting.dox
- * @brief Определение группы "Formatting" (Форматирование).
- */
-
-/**
  * @defgroup group_formatting Formatting (Форматирование)
  * @brief Конкретные реализации форматтеров лог-сообщений.
  * @details Модуль содержит прикладные реализации интерфейса ILogFormatter, 

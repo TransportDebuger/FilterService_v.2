@@ -176,13 +176,10 @@ TEST_F(FiltersTest, CompositeFilter_NullptrInVector_Throws) {
   std::vector<std::shared_ptr<ILogFilter>> filters = {
       std::make_shared<LevelFilter>(LogLevel::kInfo),
       nullptr,  // Намеренное внедрение nullptr для проверки валидации
-      std::make_shared<LevelFilter>(LogLevel::kError)
-  };
-  
-  EXPECT_THROW(
-      CompositeFilter(std::move(filters), LogicOperator::kAnd),
-      std::invalid_argument
-  );
+      std::make_shared<LevelFilter>(LogLevel::kError)};
+
+  EXPECT_THROW(CompositeFilter(std::move(filters), LogicOperator::kAnd),
+               std::invalid_argument);
 }
 
 TEST_F(FiltersTest, CompositeFilter_And_ShortCircuit) {
