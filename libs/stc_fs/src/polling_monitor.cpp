@@ -35,7 +35,6 @@ void PollingMonitor::Start() {
     }
   }
 
-  // Перехватываем исключения на границе потока, чтобы избежать std::terminate
   worker_thread_ = std::jthread([this](std::stop_token stoken) {
     try {
       Run(stoken);
@@ -55,9 +54,6 @@ void PollingMonitor::Stop() {
 
 void PollingMonitor::Run(std::stop_token stoken) {
   while (!stoken.stop_requested()) {
-    // Использование deadline вместо ручного подсчета elapsed устраняет
-    // артефакты покрытия кода и повышает устойчивость к задержкам планировщика
-    // ОС.
     auto deadline = std::chrono::steady_clock::now() + polling_interval_;
     while (std::chrono::steady_clock::now() < deadline &&
            !stoken.stop_requested()) {
@@ -84,7 +80,7 @@ void PollingMonitor::Run(std::stop_token stoken) {
         if (it == known_files_.end()) {
           callback_(Event::Created, file);
         } else if (it->second != time) {
-          callback_(Event::Modified, file);  // <-- Вероятно, это была строка 64
+          callback_(Event::Modified, file);
         }
       }
 

@@ -90,10 +90,11 @@ install(EXPORT stc_fs_targets
 # ==============================================================================
 # Сбор списка исходных файлов для линтеров
 # ==============================================================================
-file(GLOB_RECURSE STC_FS_LINT_FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/stc/fs/*.hpp
-)
+if(STC_FS_BUILD_TESTS)
+    file(GLOB_RECURSE STC_FS_LINT_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/stc/fs/*.hpp
+    )
 
 # ==============================================================================
 # 1. LINTER-TEST (Проверка стиля и статический анализ)
@@ -228,4 +229,6 @@ else()
         COMMAND ${CMAKE_COMMAND} -E false
         COMMENT "FATAL: Doxygen not found. Please install Doxygen to generate documentation."
     )
+endif()
+
 endif()
