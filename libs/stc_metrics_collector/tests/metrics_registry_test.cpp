@@ -132,6 +132,30 @@ TEST(AtomicPrimitivesTest, HistogramObserveAndBuckets) {
   EXPECT_EQ(buckets[3].load(), 1);  // 150.0
 }
 
+TEST(AtomicPrimitivesTest, HistogramIgnoresNonFiniteValues) {
+    MetricsRegistry registry;
+    auto hist = std::dynamic_pointer_cast<AtomicHistogram>(
+        registry.RegisterHistogram("test_hist_finite", "Help", {10.0, 50.0}));
+    ASSERT_NE(hist, nullptr);
+
+    // Базовое валидное наблюдение
+    hist->Observe(25.0);
+    
+    // Передача невалидных значений (NaN, +Inf, -Inf)
+    hist->Observe(std::numeric_limits<double>::quiet_NaN());
+    hist->Observe(std::numeric_limits<double>::infinity());
+    hist->Observe(-std::numeric_limits<double>::infinity());
+
+    // Верификация того, что счетчики инкрементируются только для валидных данных
+    EXPECT_EQ(hist->GetCount(), 1);
+    EXPECT_DOUBLE_EQ(hist->GetSum(), 25.0);
+    
+    const auto* buckets = hist->GetBuckets();
+    EXPECT_EQ(buckets[0].load(), 0); // <= 10.0
+    EXPECT_EQ(buckets[1].load(), 1); // <= 50.0 (попало значение 25.0)
+    EXPECT_EQ(buckets[2].load(), 0); // +Inf
+}
+
 // ==============================================================================
 // 3. Многопоточность и Lock-Free гарантии (Concurrent Test)
 // ==============================================================================

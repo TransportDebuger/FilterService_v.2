@@ -20,7 +20,7 @@ namespace stc::metrics {
 */
 class NoOpCounter final : public ICounter {
  public:
-  void Increment(double value = 1.0) override {}
+  void Increment(double /*value*/ = 1.0) override {}
 };
 
 /**
@@ -29,9 +29,9 @@ class NoOpCounter final : public ICounter {
 */
 class NoOpGauge final : public IGauge {
  public:
-  void Set(double value) override {}
-  void Increment(double value) override {}
-  void Decrement(double value) override {}
+  void Set(double /*value*/) override {}
+  void Increment(double /*value*/) override {}
+  void Decrement(double /*value*/) override {}
 };
 
 /**
@@ -40,7 +40,7 @@ class NoOpGauge final : public IGauge {
 */
 class NoOpHistogram final : public IHistogram {
  public:
-  void Observe(double value) override {}
+  void Observe(double /*value*/) override {}
 };
 
 /**
@@ -59,23 +59,23 @@ class NoOpMetricsRegistry final : public IMetricsRegistry {
         noop_gauge_(std::make_shared<NoOpGauge>()),
         noop_histogram_(std::make_shared<NoOpHistogram>()) {}
 
-  std::shared_ptr<ICounter> RegisterCounter(std::string_view name,
-                                            std::string_view help) override {
+  std::shared_ptr<ICounter> RegisterCounter(std::string_view /*name*/,
+                                            std::string_view /*help*/) override {
     return noop_counter_;
   }
 
-  std::shared_ptr<IGauge> RegisterGauge(std::string_view name,
-                                        std::string_view help) override {
+  std::shared_ptr<IGauge> RegisterGauge(std::string_view /*name*/,
+                                        std::string_view /*help*/) override {
     return noop_gauge_;
   }
 
   std::shared_ptr<IHistogram> RegisterHistogram(
-      std::string_view name, std::string_view help,
-      std::vector<double> buckets) override {
+      std::string_view /*name*/, std::string_view /*help*/,
+      std::vector<double> /*buckets*/) override {
     return noop_histogram_;
   }
 
-  void AcceptVisitor(IExporterVisitor& visitor) const override {}
+  void AcceptVisitor(IExporterVisitor& /*visitor*/) const override {}
 
  private:
   /// @private Переиспользуемый дескриптор пустого счетчика (избегает аллокаций

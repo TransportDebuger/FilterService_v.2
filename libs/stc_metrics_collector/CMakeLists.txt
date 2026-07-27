@@ -88,6 +88,7 @@ install(EXPORT stc_metrics_targets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/stc_metrics
 )
 
+if(STC_METRICS_BUILD_TESTS)
 # ==============================================================================
 # Сбор списка исходных файлов для линтеров
 # ==============================================================================
@@ -230,4 +231,6 @@ else()
         COMMAND ${CMAKE_COMMAND} -E false
         COMMENT "FATAL: Doxygen not found. Please install Doxygen to generate documentation."
     )
+endif()
+
 endif()
