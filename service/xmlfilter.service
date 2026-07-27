@@ -1,0 +1,42 @@
+[Unit]
+Description=XML Filter Service
+Documentation=https://git.stc.local/stc/xmlfilter
+After=network.target
+Wants=network-online.target
+
+[Service]
+# Type=simple означает, что systemd отслеживает основной процесс напрямую.
+# Двойной fork и ручное управление PID-файлами для демонизации больше не требуются.
+Type=simple
+
+# Пользователь и группа (обеспечение безопасности)
+User=xmlfilter
+Group=xmlfilter
+
+# Команда запуска.
+ExecStart=/usr/local/bin/xml_filter_service --config-file=/etc/xmlfilter/config.json
+
+# Команда для корректной перезагрузки конфигурации по сигналу SIGHUP
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Перезапуск при падении (заменяет логику healthCheck в Master для критических сбоев)
+Restart=on-failure
+RestartSec=5s
+
+# Ограничение ресурсов (Defensive Programming на уровне ОС)
+LimitNOFILE=65535
+MemoryMax=2G
+TimeoutStopSec=30s
+
+# Перенаправление логов в journald (вместо ручного закрытия дескрипторов)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xmlfilter
+
+# Создание необходимых директорий при старте, если их нет
+RuntimeDirectory=xmlfilter
+StateDirectory=xmlfilter
+LogsDirectory=xmlfilter
+
+[Install]
+WantedBy=multi-user.target
