@@ -2,65 +2,71 @@
 @file sourceconfig.hpp
 @brief Строгие структуры данных для конфигурации источника.
 @version 2.1.0
-@date 2026-07-24
+@date 2026-09-06
 */
 #pragma once
-
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
 namespace stc {
-
-/**
-@struct RecordCountConfig
-@brief Параметры контроля количества записей в XML-документе.
-*/
-struct RecordCountConfig {
-    std::string xpath; ///< XPath к элементу-счётчику.
-    std::string attribute; ///< Имя атрибута, хранящего количество.
-    bool enabled{false}; ///< Флаг активности контроля.
-
-    RecordCountConfig() = default;
-    RecordCountConfig(const std::string& xp, const std::string& attr, bool en = true)
-        : xpath(xp), attribute(attr), enabled(en) {}
-};
-
 /**
 @struct SourceConfig
 @brief Конфигурация одного источника данных для обработки.
 */
 struct SourceConfig {
     // --- Обязательные поля ---
-    std::string name; ///< Уникальное имя источника.
-    std::string type; ///< Тип хранилища: "local", "smb", "ftp".
-    std::string path; ///< Путь к источнику данных.
-    std::string file_mask; ///< Маска файлов (glob: *, ?).
-    std::string processed_dir; ///< Директория для обработанных файлов.
+    std::string name;       ///< Уникальное имя источника.
+    std::string type;       ///< Тип хранилища: "local", "smb", "ftp".
+    std::string path;       ///< Путь к источнику данных.
+    std::string file_mask;  ///< Маска файлов (glob: *, ?).
+    std::string processed_dir;  ///< Директория для обработанных файлов.
 
     // --- Опциональные поля ---
-    std::string bad_dir; ///< Директория для файлов с ошибками.
-    std::string excluded_dir; ///< Директория для исключённых данных.
-    std::string filtered_template = "{filename}_filtered.{ext}"; ///< Шаблон имени отфильтрованного файла.
-    std::string excluded_template = "{filename}_excluded.{ext}"; ///< Шаблон имени исключённого файла.
-    std::string comparison_list = "./comparison_list.csv"; ///< Путь к CSV-файлу сравнения.
-    bool filtering_enabled = true; ///< Флаг включения фильтрации.
-    std::chrono::seconds check_interval{5}; ///< Интервал проверки изменений.
-    bool enabled = true; ///< Флаг активности источника.
-    std::string monitoring_strategy = "auto"; ///< Стратегия мониторинга ФС: "auto", "inotify", "polling".
+    std::string bad_dir;  ///< Директория для файлов с ошибками.
+    std::string excluded_dir;  ///< Директория для исключённых данных.
+    std::string temp_dir;  ///< Директория для временных файлов.
+    std::string filtered_template =
+        "{filename}_filtered.{ext}";  ///< Шаблон имени отфильтрованного файла.
+    std::string excluded_template =
+        "{filename}_excluded.{ext}";  ///< Шаблон имени исключённого файла.
+    std::string comparison_list =
+        "./comparison_list.csv";  ///< Путь к CSV-файлу сравнения.
+    bool filtering_enabled = true;  ///< Флаг включения фильтрации.
+    std::chrono::seconds check_interval{5};  ///< Интервал проверки изменений.
+    bool enabled = true;  ///< Флаг активности источника.
+    std::string monitoring_strategy =
+        "auto";  ///< Стратегия мониторинга ФС: "auto", "inotify", "polling".
 
     // --- Параметры подключения ---
-    std::unordered_map<std::string, std::string> params; ///< Параметры подключения (username, password, domain, port).
+    std::unordered_map<std::string, std::string>
+        params;  ///< Параметры подключения (username, password, domain, port).
+
+    /**
+    @struct RecordCountConfig
+    @brief Параметры контроля количества записей в XML-документе.
+    */
+    struct RecordCountConfig {
+        /// @brief Путь к счётчику относительно корневого элемента.
+        /// Примеры: "@recordCount" для атрибута корня,
+        ///          "portion" для вложенного элемента,
+        ///          "stats/portion" для вложенного элемента с промежуточным уровнем.
+        std::string path;
+        /// @brief Флаг активности контроля.
+        bool enabled{false};
+        RecordCountConfig() = default;
+        explicit RecordCountConfig(std::string p, bool en = true)
+            : path(std::move(p)), enabled(en) {}
+    };
 
     /**
     @struct XmlNamespace
     @brief Пространство имён для XPath-запросов.
     */
     struct XmlNamespace {
-        std::string prefix; ///< Префикс пространства имён.
-        std::string uri; ///< URI пространства имён.
+        std::string prefix;  ///< Префикс пространства имён.
+        std::string uri;     ///< URI пространства имён.
     };
 
     /**
@@ -68,11 +74,18 @@ struct SourceConfig {
     @brief Один критерий фильтрации XML-документа.
     */
     struct XmlFilterCriterion {
-        std::string xpath; ///< XPath-выражение для поиска узлов.
-        std::string attribute; ///< Имя атрибута для извлечения значения (пусто = текстовое содержимое).
-        std::string csv_column; ///< Имя столбца CSV для сравнения.
-        bool required = true; ///< Флаг обязательности критерия.
-        double weight = 1.0; ///< Вес критерия (для WEIGHTED-логики).
+        /// @brief Путь к свойству относительно объекта или группы.
+        /// Примеры: "docNumber", "docNumber/@value", "@id",
+        ///          "ancestor::aircompany/@name", "ancestor::category/ancestor::subcategory/@name".
+        std::string path;
+        /// @brief Имя атрибута для извлечения значения (пусто = текстовое содержимое).
+        std::string attribute;
+        /// @brief Имя столбца CSV для сравнения.
+        std::string csv_column;
+        /// @brief Флаг активности критерия. Если false, критерий исключается из оценки.
+        bool required = true;
+        /// @brief Вес критерия (для WEIGHTED-логики).
+        double weight = 1.0;
     };
 
     /**
@@ -80,14 +93,30 @@ struct SourceConfig {
     @brief Агрегированная конфигурация фильтрации XML.
     */
     struct XmlFilterConfig {
-        std::vector<XmlFilterCriterion> criteria; ///< Список критериев фильтрации.
-        std::string logic_operator = "AND"; ///< Логический оператор: "AND", "OR", "MAJORITY", "WEIGHTED".
-        std::string comparison_list; ///< Переопределение пути к CSV для данной конфигурации.
-        double threshold = 0.5; ///< Порог для MAJORITY и WEIGHTED.
-        std::vector<XmlNamespace> namespaces; ///< Пространства имён для XPath.
-        bool auto_register_namespaces = true; ///< Автоматическая регистрация неймспейсов из документа.
-        RecordCountConfig record_count_config; ///< Параметры контроля количества записей.
-    } xml_filter; ///< Конфигурация XML-фильтрации.
+        /// @brief Имя тега объекта фильтрации.
+        std::string object_name;
+        /// @brief URI пространства имён объекта (опционально).
+        /// Если пусто, объект распознаётся по локальному имени независимо от пространства имён.
+        /// Если задано, объект распознаётся только по сочетанию локального имени и пространства имён.
+        std::string object_namespace_uri;
+        /// @brief Список критериев фильтрации.
+        std::vector<XmlFilterCriterion> criteria;
+        /// @brief Логический оператор: "AND", "OR", "MAJORITY", "WEIGHTED".
+        std::string logic_operator = "AND";
+        /// @brief Переопределение пути к CSV для данной конфигурации.
+        std::string comparison_list;
+        /// @brief Порог для WEIGHTED-логики. Игнорируется для остальных операторов.
+        double threshold = 0.5;
+        /// @brief Пространства имён для XPath-запросов.
+        std::vector<XmlNamespace> namespaces;
+        /// @brief Автоматическая регистрация пространств имён из документа.
+        bool auto_register_namespaces = true;
+        /// @brief Параметры контроля количества записей.
+        RecordCountConfig record_count_config;
+    };
+
+    /// @brief Конфигурация XML-фильтрации.
+    XmlFilterConfig xml_filter;
 
     /**
     @brief Десериализует SourceConfig из JSON-объекта.
@@ -138,7 +167,7 @@ private:
     @param[in] template_str Шаблон с плейсхолдерами {filename} и {ext}.
     @return std::string Сформированное имя файла.
     */
-    std::string applyTemplate(const std::string& filename, const std::string& template_str) const;
+    std::string applyTemplate(const std::string& filename,
+                              const std::string& template_str) const;
 };
-
-} // namespace stc
+}  // namespace stc

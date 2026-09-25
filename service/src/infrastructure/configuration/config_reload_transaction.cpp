@@ -1,8 +1,8 @@
 /**
 @file config_reload_transaction.cpp
 @brief Реализация транзакционной перезагрузки конфигурации.
-@version 2.0.0
-@date 2026-07-17
+@version 3.0.0
+@date 2026-07-24
 */
 #include "config_reload_transaction.hpp"
 
@@ -10,64 +10,39 @@
 
 namespace stc {
 
-ConfigReloadTransaction::ConfigReloadTransaction(ConfigManager& configMgr,
-                                                 std::shared_ptr<stc::logger::ILogger> logger)
-    : configMgr_(configMgr), logger_(std::move(logger)) {}
+ConfigReloadTransaction::ConfigReloadTransaction(
+    ConfigurationService& service, std::shared_ptr<stc::logger::ILogger> logger)
+    : service_(service), logger_(std::move(logger)) {}
 
 ConfigReloadTransaction::~ConfigReloadTransaction() {
-    if (active_) {
-        try {
-            rollback();
-        } catch (const std::exception& e) {
-            if (logger_) {
-                logger_->Error(std::string("ConfigReloadTransaction:: rollback failed: ") + e.what());
-            }
-        }
-    }
-}
-
-void ConfigReloadTransaction::begin() {
-    if (active_) {
-        throw std::runtime_error("ConfigReloadTransaction: Transaction already active");
-    }
-    // Используем публичный геттер, который внутри себя корректно захватывает мьютекс ConfigManager
-    backup_ = configMgr_.getCurrentConfig();
-    active_ = true;
-    if (logger_) logger_->Debug("ConfigReloadTransaction: backup created");
-}
-
-void ConfigReloadTransaction::commit() {
-    if (!active_) {
-        throw std::runtime_error("ConfigReloadTransaction: No active transaction");
-    }
-    active_ = false;
-    backup_.clear(); // Освобождаем память, занимаемую резервной копией
-    if (logger_) logger_->Debug("ConfigReloadTransaction: committed");
-}
-
-void ConfigReloadTransaction::rollback() {
-    if (!active_) {
-        throw std::runtime_error("ConfigReloadTransaction: No active transaction");
-    }
-    configMgr_.restoreFromBackup(backup_);
-    active_ = false;
-    backup_.clear();
-    if (logger_) logger_->Info("ConfigReloadTransaction: rolled back");
-}
-
-void ConfigReloadTransaction::reload() {
-    begin();
+  if (active_) {
     try {
-        configMgr_.reload();
-        commit();
-        if (logger_) logger_->Info("ConfigReloadTransaction: reload successful");
-    } catch (const std::exception& e) {
-        if (logger_) {
-            logger_->Warning(std::string("ConfigReloadTransaction: reload failed, rolling back: ") + e.what());
-        }
-        rollback();
-        throw;
+      service_.RestoreState();
+      if (logger_)
+        logger_->Warning(
+            "ConfigReloadTransaction: auto-rolled back on destruction");
+    } catch (...) {
     }
+  }
 }
 
-} // namespace stc
+ApplicationConfiguration ConfigReloadTransaction::reload() {
+  service_.BackupState();
+  active_ = true;
+
+  try {
+    ApplicationConfiguration new_config = service_.ReloadConfiguration();
+    active_ = false;  // Фиксация транзакции
+    if (logger_) logger_->Info("ConfigReloadTransaction: reload successful");
+    return new_config;
+  } catch (const std::exception& e) {
+    service_.RestoreState();
+    active_ = false;
+    if (logger_)
+      logger_->Error("ConfigReloadTransaction: reload failed, rolled back: " +
+                     std::string(e.what()));
+    throw;
+  }
+}
+
+}  // namespace stc

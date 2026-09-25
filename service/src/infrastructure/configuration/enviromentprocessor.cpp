@@ -21,10 +21,10 @@ void EnvironmentProcessor::process(nlohmann::json &config) const {
 void EnvironmentProcessor::walkJson(nlohmann::json &node,
                                     function<void(string &)> func) const {
   if (node.is_object()) {
-    for (auto& item : node.items()) {
-            auto& value = item.value();
-            walkJson(value, func);
-        }
+    for (auto &item : node.items()) {
+      auto &value = item.value();
+      walkJson(value, func);
+    }
   } else if (node.is_array()) {
     for (auto &element : node) {
       walkJson(element, func);

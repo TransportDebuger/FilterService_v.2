@@ -5,6 +5,7 @@
 @date 2026-07-24
 */
 #include "sourceconfig.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <stdexcept>
@@ -45,13 +46,12 @@ SourceConfig SourceConfig::fromJson(const nlohmann::json& src) {
     // --- Опциональные поля ---
     config.bad_dir = src.value("bad_dir", "");
     config.excluded_dir = src.value("excluded_dir", "");
+    config.temp_dir = src.value("temp_dir", "");
     config.filtered_template = src.value("filtered_template", "{filename}_filtered.{ext}");
     config.excluded_template = src.value("excluded_template", "{filename}_excluded.{ext}");
     config.comparison_list = src.value("comparison_list", "./comparison_list.csv");
     config.filtering_enabled = src.value("filtering_enabled", true);
     config.enabled = src.value("enabled", true);
-    
-    // Интеграция стратегии мониторинга файловой системы
     config.monitoring_strategy = src.value("monitoring_strategy", "auto");
 
     if (src.contains("check_interval")) {
@@ -76,9 +76,12 @@ SourceConfig SourceConfig::fromJson(const nlohmann::json& src) {
     // --- Секция xml_filter ---
     if (src.contains("xml_filter") && src["xml_filter"].is_object()) {
         const auto& xf = src["xml_filter"];
+
+        config.xml_filter.object_name = xf.value("object_name", "");
+        config.xml_filter.object_namespace_uri = xf.value("object_namespace_uri", "");
         config.xml_filter.logic_operator = xf.value("logic_operator", "AND");
         config.xml_filter.threshold = xf.value("threshold", 0.5);
-        
+
         if (xf.contains("comparison_list")) {
             config.xml_filter.comparison_list = xf["comparison_list"].get<std::string>();
         } else {
@@ -99,27 +102,19 @@ SourceConfig SourceConfig::fromJson(const nlohmann::json& src) {
         if (xf.contains("criteria") && xf["criteria"].is_array()) {
             for (const auto& crit : xf["criteria"]) {
                 XmlFilterCriterion criterion;
-                criterion.xpath = crit.value("xpath", "");
+                criterion.path = crit.value("path", "");
                 criterion.attribute = crit.value("attribute", "");
                 criterion.csv_column = crit.value("csv_column", "");
                 criterion.required = crit.value("required", true);
                 criterion.weight = crit.value("weight", 1.0);
                 config.xml_filter.criteria.push_back(criterion);
             }
-        } else if (xf.contains("xpath")) {
-            XmlFilterCriterion criterion;
-            criterion.xpath = xf.value("xpath", "");
-            criterion.attribute = xf.value("attribute", "");
-            criterion.csv_column = xf.value("csv_column", "");
-            config.xml_filter.criteria.push_back(criterion);
         }
 
         if (xf.contains("record_count") && xf["record_count"].is_object()) {
             const auto& rcObj = xf["record_count"];
-            if (rcObj.contains("xpath") && rcObj["xpath"].is_string() &&
-                rcObj.contains("attribute") && rcObj["attribute"].is_string()) {
-                config.xml_filter.record_count_config.xpath = rcObj["xpath"].get<std::string>();
-                config.xml_filter.record_count_config.attribute = rcObj["attribute"].get<std::string>();
+            if (rcObj.contains("path") && rcObj["path"].is_string()) {
+                config.xml_filter.record_count_config.path = rcObj["path"].get<std::string>();
                 config.xml_filter.record_count_config.enabled = true;
             }
         }
@@ -136,10 +131,11 @@ nlohmann::json SourceConfig::toJson() const {
     j["path"] = path;
     j["file_mask"] = file_mask;
     j["processed_dir"] = processed_dir;
-    
+
     if (!bad_dir.empty()) j["bad_dir"] = bad_dir;
     if (!excluded_dir.empty()) j["excluded_dir"] = excluded_dir;
-    
+    if (!temp_dir.empty()) j["temp_dir"] = temp_dir;
+
     j["filtered_template"] = filtered_template;
     j["excluded_template"] = excluded_template;
     j["comparison_list"] = comparison_list;
@@ -154,14 +150,18 @@ nlohmann::json SourceConfig::toJson() const {
 
     if (!xml_filter.criteria.empty()) {
         nlohmann::json xf;
+        xf["object_name"] = xml_filter.object_name;
+        if (!xml_filter.object_namespace_uri.empty()) {
+            xf["object_namespace_uri"] = xml_filter.object_namespace_uri;
+        }
         xf["logic_operator"] = xml_filter.logic_operator;
         xf["threshold"] = xml_filter.threshold;
-        
+
         if (!xml_filter.comparison_list.empty() &&
             xml_filter.comparison_list != comparison_list) {
             xf["comparison_list"] = xml_filter.comparison_list;
         }
-        
+
         if (!xml_filter.namespaces.empty()) {
             nlohmann::json namespaces = nlohmann::json::array();
             for (const auto& ns : xml_filter.namespaces) {
@@ -176,7 +176,7 @@ nlohmann::json SourceConfig::toJson() const {
         nlohmann::json criteria = nlohmann::json::array();
         for (const auto& crit : xml_filter.criteria) {
             nlohmann::json c;
-            c["xpath"] = crit.xpath;
+            c["path"] = crit.path;
             if (!crit.attribute.empty()) c["attribute"] = crit.attribute;
             c["csv_column"] = crit.csv_column;
             c["required"] = crit.required;
@@ -184,6 +184,13 @@ nlohmann::json SourceConfig::toJson() const {
             criteria.push_back(c);
         }
         xf["criteria"] = criteria;
+
+        if (xml_filter.record_count_config.enabled) {
+            nlohmann::json rc;
+            rc["path"] = xml_filter.record_count_config.path;
+            xf["record_count"] = rc;
+        }
+
         j["xml_filter"] = xf;
     }
 
@@ -205,6 +212,7 @@ void SourceConfig::validate() const {
     if (type == "smb" && !hasRequiredParams({"username"})) {
         throw std::invalid_argument("SMB source requires 'username' parameter");
     }
+
     if (type == "ftp" && !hasRequiredParams({"username", "password"})) {
         throw std::invalid_argument("FTP source requires 'username' and 'password' parameters");
     }
@@ -213,19 +221,27 @@ void SourceConfig::validate() const {
         throw std::invalid_argument("Check interval must be positive");
     }
 
-    // Строгая валидация стратегии мониторинга ФС
     const std::vector<std::string> valid_strategies = {"auto", "inotify", "polling"};
     if (std::find(valid_strategies.begin(), valid_strategies.end(), monitoring_strategy) == valid_strategies.end()) {
         throw std::invalid_argument("Invalid monitoring strategy: " + monitoring_strategy);
     }
 
     if (filtering_enabled) {
+        if (xml_filter.object_name.empty()) {
+            throw std::invalid_argument("XML filter requires 'object_name'");
+        }
+
         if (xml_filter.criteria.empty()) {
             throw std::invalid_argument("XML filter requires at least one criterion");
         }
+
         for (const auto& crit : xml_filter.criteria) {
-            if (crit.xpath.empty()) throw std::invalid_argument("Criterion xpath cannot be empty");
-            if (crit.csv_column.empty()) throw std::invalid_argument("Criterion csv_column cannot be empty");
+            if (crit.path.empty()) {
+                throw std::invalid_argument("Criterion path cannot be empty");
+            }
+            if (crit.csv_column.empty()) {
+                throw std::invalid_argument("Criterion csv_column cannot be empty");
+            }
         }
 
         const std::vector<std::string> valid_operators = {"AND", "OR", "MAJORITY", "WEIGHTED"};
@@ -236,55 +252,63 @@ void SourceConfig::validate() const {
         if (xml_filter.logic_operator == "WEIGHTED") {
             double total_weight = 0.0;
             for (const auto& crit : xml_filter.criteria) {
-                if (crit.weight <= 0) throw std::invalid_argument("Criterion weight must be positive");
+                if (crit.weight <= 0) {
+                    throw std::invalid_argument("Criterion weight must be positive");
+                }
                 total_weight += crit.weight;
             }
-            if (total_weight <= 0) throw std::invalid_argument("Total criteria weight must be positive");
+            if (total_weight <= 0) {
+                throw std::invalid_argument("Total criteria weight must be positive");
+            }
         }
 
-        if (xml_filter.threshold <= 0.0 || xml_filter.threshold > 1.0) {
-            throw std::invalid_argument("Threshold must be in range (0.0, 1.0]");
+        if (xml_filter.threshold < 0.0 || xml_filter.threshold > 1.0) {
+            throw std::invalid_argument("Threshold must be in range [0.0, 1.0]");
         }
     }
 }
 
-std::string SourceConfig::getFilteredFileName(const std::string& original_filename) const {
-    return applyTemplate(original_filename, filtered_template);
+std::string SourceConfig::getFilteredFileName(
+    const std::string& original_filename) const {
+  return applyTemplate(original_filename, filtered_template);
 }
 
-std::string SourceConfig::getExcludedFileName(const std::string& original_filename) const {
-    return applyTemplate(original_filename, excluded_template);
+std::string SourceConfig::getExcludedFileName(
+    const std::string& original_filename) const {
+  return applyTemplate(original_filename, excluded_template);
 }
 
-bool SourceConfig::hasRequiredParams(const std::vector<std::string>& required_params) const {
-    for (const auto& param : required_params) {
-        auto it = params.find(param);
-        if (it == params.end() || it->second.empty()) return false;
-    }
-    return true;
+bool SourceConfig::hasRequiredParams(
+    const std::vector<std::string>& required_params) const {
+  for (const auto& param : required_params) {
+    auto it = params.find(param);
+    if (it == params.end() || it->second.empty()) return false;
+  }
+  return true;
 }
 
-std::string SourceConfig::applyTemplate(const std::string& filename, const std::string& template_str) const {
-    fs::path file_path(filename);
-    std::string stem = file_path.stem().string();
-    std::string ext = file_path.extension().string();
-    
-    if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
-    
-    std::string result = template_str;
-    size_t pos = 0;
-    while ((pos = result.find("{filename}", pos)) != std::string::npos) {
-        result.replace(pos, 10, stem);
-        pos += stem.length();
-    }
-    
-    pos = 0;
-    while ((pos = result.find("{ext}", pos)) != std::string::npos) {
-        result.replace(pos, 5, ext);
-        pos += ext.length();
-    }
-    
-    return result;
+std::string SourceConfig::applyTemplate(const std::string& filename,
+                                        const std::string& template_str) const {
+  fs::path file_path(filename);
+  std::string stem = file_path.stem().string();
+  std::string ext = file_path.extension().string();
+
+  if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+
+  std::string result = template_str;
+  size_t pos = 0;
+  while ((pos = result.find("{filename}", pos)) != std::string::npos) {
+    result.replace(pos, 10, stem);
+    pos += stem.length();
+  }
+
+  pos = 0;
+  while ((pos = result.find("{ext}", pos)) != std::string::npos) {
+    result.replace(pos, 5, ext);
+    pos += ext.length();
+  }
+
+  return result;
 }
 
-} // namespace stc
+}  // namespace stc
