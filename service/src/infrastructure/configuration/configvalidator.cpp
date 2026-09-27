@@ -26,6 +26,16 @@ bool ConfigValidator::validateRoot(const nlohmann::json &config) const {
     throw std::runtime_error(
         "ConfigValidator: Defaults section cannot be empty");
   }
+  
+  if (config.contains("metrics_port")) {
+    if (!config["metrics_port"].is_number_integer()) {
+        throw std::runtime_error("ConfigValidator: 'metrics_port' must be an integer");
+    }
+    int port = config["metrics_port"].get<int>();
+    if (port < 0 || port > 65535) {
+        throw std::runtime_error("ConfigValidator: 'metrics_port' out of range [0, 65535]");
+    }
+}
   return true;
 }
 

@@ -132,6 +132,8 @@ ApplicationConfiguration ConfigurationService::Deserialize(
   app_config.global_comparison_list =
       env_config.value("comparison_list", "./comparison_list.csv");
 
+  app_config.metrics_port = env_config.value("metrics_port", 0);
+
   return app_config;
 }
 

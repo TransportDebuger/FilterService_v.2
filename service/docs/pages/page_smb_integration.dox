@@ -1,0 +1,86 @@
+/**
+@page page_smb_integration Интеграция SMB/CIFS ресурсов (Путь А)
+@ingroup stc_adapters
+
+Данный документ описывает архитектурный стандарт работы с сетевыми файловыми 
+ресурсами (SMB/CIFS) в сервисе.
+
+@section sec_architecture Архитектурное решение
+
+Для работы с SMB-ресурсами **используется исключительно класс `stc::LocalStorageAdapter`**. 
+Специализированный класс `SmbFileAdapter` и легаси-компонент `FileWatcher` полностью 
+удалены из кодовой базы.
+
+Это решение обусловлено следующими факторами:
+1. @b Безопасность: Исключается использование `std::system("mount ...")`, которое 
+   требует привилегий root, уязвимо к инъекциям аргументов и раскрывает пароли 
+   в выводе `ps aux`.
+2. @b Надежность: Делегирование монтирования операционной системе (через `systemd.mount` 
+   или `/etc/fstab` с опцией `x-systemd.automount`) гарантирует корректное 
+   восстановление соединения при сетевых сбоях без участия бизнес-логики сервиса.
+3. @b Совместимость с `stc::fs`: Библиотека `stc::fs` оперирует путями в пространстве 
+   имен ядра Linux. При использовании локальной точки монтирования метод `StatFs` 
+   корректно возвращает `CIFS_MAGIC_NUMBER` (0xFF534D42), что заставляет фабрику 
+   `DirectoryMonitor` автоматически выбирать стратегию `Polling`, единственно 
+   работоспособную для сетевых шар.
+
+@section sec_configuration Конфигурация
+
+В файле `config.json` для SMB-источников необходимо указывать **локальный путь 
+точки монтирования**, а не URL-схему `smb://`.
+
+@code{.json}
+{
+  "environments": {
+    "production": {
+      "sources": [
+        {
+          "name": "smb_archive_processing",
+          "type": "local",
+          "path": "/mnt/smb_archive",
+          "monitoring_strategy": "auto",
+          "check_interval": 30,
+          "enabled": true
+        }
+      ]
+    }
+  }
+}
+@endcode
+
+@par Примечание:
+Поле `monitoring_strategy` может быть явно установлено в `"polling"` для 
+гарантированного использования опросного механизма, либо оставлено как `"auto"` 
+(эвристика `statfs` автоматически определит сетевую природу ФС).
+
+@section sec_os_setup Настройка ОС (systemd)
+
+Рекомендуемый способ автоматического монтирования SMB-ресурса:
+
+1. Создать файл `/etc/systemd/system/mnt-smb_archive.mount`:
+@code{.ini}
+[Unit]
+Description=SMB Archive Mount
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=//server/share
+Where=/mnt/smb_archive
+Type=cifs
+Options=credentials=/etc/smb-credentials.conf,vers=3.0,uid=1000,gid=1000,file_mode=0644,dir_mode=0755,x-systemd.automount,x-systemd.idle-timeout=60
+
+[Install]
+WantedBy=multi-user.target
+@endcode
+
+2. Активировать точку монтирования:
+@code{.bash}
+sudo systemctl daemon-reload
+sudo systemctl enable --now mnt-smb_archive.mount
+@endcode
+
+После этой настройки сервис `xmlfilter` будет работать с `/mnt/smb_archive` 
+как с обычной локальной директорией, получая все гарантии RAII и потокобезопасности 
+от `stc::fs::DirectoryMonitor`.
+*/

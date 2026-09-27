@@ -1,16 +1,15 @@
 /**
 @file XMLProcessor.cpp
 @brief Реализация потокового процессора для обработки, фильтрации и сохранения
-результатов XML-файлов.
-@version 4.0.0
-@date 2026-09-06
+результатов XML-файлов с поддержкой иерархических групп.
+@version 5.0.0
+@date 2026-09-27
 */
 #include "XMLProcessor.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -68,22 +67,6 @@ bool XMLProcessor::isBypassMode() const {
         }
     }
     return true;
-}
-
-void XMLProcessor::copyFileBypass(const std::string& srcPath,
-                                  const std::string& dstPath) {
-    std::error_code ec;
-    fs::create_directories(fs::path(dstPath).parent_path(), ec);
-    if (ec) {
-        throw std::runtime_error("Failed to create directory for bypass file: " +
-                                 ec.message());
-    }
-
-    fs::copy_file(srcPath, dstPath, fs::copy_options::overwrite_existing, ec);
-    if (ec) {
-        throw std::runtime_error("Failed to copy file in bypass mode: " +
-                                 ec.message());
-    }
 }
 
 bool XMLProcessor::extractRootInfo(xmlTextReaderPtr reader,
@@ -168,9 +151,93 @@ bool XMLProcessor::isObject(xmlTextReaderPtr reader) const {
     return uri == config_.xml_filter.object_namespace_uri;
 }
 
-void XMLProcessor::extractObjectProperties(xmlTextReaderPtr reader,
-                                           ObjectInfo& obj_info) {
-    // Извлекаем атрибуты объекта
+std::string XMLProcessor::normalizeValue(const std::string& value) {
+    return FilterListManager::normalizeValue(value);
+}
+
+std::string XMLProcessor::getTempFilePath(const std::string& filename,
+                                          const std::string& prefix) const {
+    std::string tempDir = config_.temp_dir;
+    if (tempDir.empty()) {
+        tempDir = "/var/xmlfilter/temp";
+    }
+
+    std::error_code ec;
+    fs::create_directories(tempDir, ec);
+
+    std::string tempPath = (fs::path(tempDir) / (prefix + "_" + filename)).string();
+    return tempPath;
+}
+
+void XMLProcessor::cleanupTempFiles(const std::vector<std::string>& paths) const {
+    for (const auto& path : paths) {
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
+}
+
+void XMLProcessor::extractObjectPropertiesFromNode(xmlNodePtr node,
+                                                   ObjectInfo& obj_info) const {
+    if (!node) {
+        return;
+    }
+
+    // Извлекаем атрибуты объекта (с префиксом "@")
+    for (xmlAttrPtr attr = node->properties; attr; attr = attr->next) {
+        if (attr->children && attr->children->content) {
+            std::string aname = reinterpret_cast<const char*>(attr->name);
+            std::string avalue =
+                reinterpret_cast<const char*>(attr->children->content);
+            obj_info.properties.push_back({"@" + aname, avalue});
+        }
+    }
+
+    // Обходим дочерние элементы объекта
+    for (xmlNodePtr child = node->children; child; child = child->next) {
+        if (child->type == XML_ELEMENT_NODE) {
+            std::string childName = reinterpret_cast<const char*>(child->name);
+
+            // Извлекаем атрибуты дочернего элемента
+            for (xmlAttrPtr attr = child->properties; attr; attr = attr->next) {
+                if (attr->children && attr->children->content) {
+                    std::string aname =
+                        reinterpret_cast<const char*>(attr->name);
+                    std::string avalue =
+                        reinterpret_cast<const char*>(attr->children->content);
+                    obj_info.properties.push_back(
+                        {childName + "/@" + aname, avalue});
+                }
+            }
+
+            // Проверяем наличие CDATA внутри дочернего элемента
+            bool hasCdata = false;
+            for (xmlNodePtr subchild = child->children; subchild;
+                 subchild = subchild->next) {
+                if (subchild->type == XML_CDATA_SECTION_NODE) {
+                    hasCdata = true;
+                    obj_info.has_cdata = true;
+                    break;
+                }
+            }
+
+            // Извлекаем текстовое содержимое дочернего элемента
+            if (!hasCdata) {
+                for (xmlNodePtr subchild = child->children; subchild;
+                     subchild = subchild->next) {
+                    if (subchild->type == XML_TEXT_NODE && subchild->content) {
+                        std::string value =
+                            reinterpret_cast<const char*>(subchild->content);
+                        obj_info.properties.push_back({childName, value});
+                    }
+                }
+            }
+        }
+    }
+}
+
+void XMLProcessor::extractGroupProperties(xmlTextReaderPtr reader,
+                                          GroupBuffer& group) const {
+    // Извлекаем атрибуты группы
     if (xmlTextReaderMoveToFirstAttribute(reader) == 1) {
         do {
             const xmlChar* attrName = xmlTextReaderConstName(reader);
@@ -178,127 +245,15 @@ void XMLProcessor::extractObjectProperties(xmlTextReaderPtr reader,
             if (attrName && attrValue) {
                 std::string aname = reinterpret_cast<const char*>(attrName);
                 std::string avalue = reinterpret_cast<const char*>(attrValue);
-                obj_info.properties.push_back({"@" + aname, avalue});
+                group.properties.push_back({"@" + aname, avalue});
             }
         } while (xmlTextReaderMoveToNextAttribute(reader) == 1);
         xmlTextReaderMoveToElement(reader);
     }
-
-    // Читаем поддерево объекта для извлечения свойств-элементов
-    int depth = 0;
-    std::string currentPropertyName;
-    bool insideProperty = false;
-    bool hasCdata = false;
-
-    int ret = xmlTextReaderRead(reader);
-    while (ret == 1) {
-        int type = xmlTextReaderNodeType(reader);
-
-        if (type == XML_READER_TYPE_ELEMENT) {
-            depth++;
-            const xmlChar* localName = xmlTextReaderConstLocalName(reader);
-            if (localName) {
-                currentPropertyName = reinterpret_cast<const char*>(localName);
-                insideProperty = true;
-                hasCdata = false;
-
-                // Извлекаем атрибуты свойства
-                if (xmlTextReaderMoveToFirstAttribute(reader) == 1) {
-                    do {
-                        const xmlChar* attrName = xmlTextReaderConstName(reader);
-                        const xmlChar* attrValue = xmlTextReaderConstValue(reader);
-                        if (attrName && attrValue) {
-                            std::string aname = reinterpret_cast<const char*>(attrName);
-                            std::string avalue = reinterpret_cast<const char*>(attrValue);
-                            obj_info.properties.push_back(
-                                {currentPropertyName + "/@" + aname, avalue});
-                        }
-                    } while (xmlTextReaderMoveToNextAttribute(reader) == 1);
-                    xmlTextReaderMoveToElement(reader);
-                }
-            }
-        } else if (type == XML_READER_TYPE_END_ELEMENT) {
-            depth--;
-            if (depth < 0) {
-                break;  // Достигли закрывающего тега объекта
-            }
-            insideProperty = false;
-        } else if (type == XML_READER_TYPE_TEXT ||
-                   type == XML_READER_TYPE_CDATA) {
-            if (type == XML_READER_TYPE_CDATA) {
-                hasCdata = true;
-                obj_info.has_cdata = true;
-            }
-            if (insideProperty && !hasCdata) {
-                const xmlChar* text = xmlTextReaderConstValue(reader);
-                if (text) {
-                    std::string value = reinterpret_cast<const char*>(text);
-                    obj_info.properties.push_back({currentPropertyName, value});
-                }
-            }
-        }
-
-        ret = xmlTextReaderRead(reader);
-    }
 }
 
-std::string XMLProcessor::extractPropertyValue(
-    const ObjectInfo& obj_info,
-    const SourceConfig::XmlFilterCriterion& criterion) {
-    std::string path = criterion.path;
-    std::string attributeName = criterion.attribute;
-
-    // Если путь содержит атрибут (например, "docNumber/@value")
-    size_t atPos = path.find("/@");
-    if (atPos != std::string::npos) {
-        std::string propertyName = path.substr(0, atPos);
-        std::string attrName = path.substr(atPos + 2);
-
-        std::string searchKey = propertyName + "/@" + attrName;
-        for (const auto& prop : obj_info.properties) {
-            if (prop.name == searchKey) {
-                return normalizeValue(prop.value);
-            }
-        }
-        return "";
-    }
-
-    // Если задан отдельный атрибут в критерии
-    if (!attributeName.empty()) {
-        std::string searchKey = path + "/@" + attributeName;
-        for (const auto& prop : obj_info.properties) {
-            if (prop.name == searchKey) {
-                return normalizeValue(prop.value);
-            }
-        }
-        return "";
-    }
-
-    // Если путь начинается с "@", это атрибут самого объекта
-    if (path.starts_with("@")) {
-        std::string searchKey = "@" + path.substr(1);
-        for (const auto& prop : obj_info.properties) {
-            if (prop.name == searchKey) {
-                return normalizeValue(prop.value);
-            }
-        }
-        return "";
-    }
-
-    // Обычное текстовое свойство
-    for (const auto& prop : obj_info.properties) {
-        if (prop.name == path) {
-            if (obj_info.has_cdata) {
-                return "";
-            }
-            return normalizeValue(prop.value);
-        }
-    }
-
-    return "";
-}
-
-bool XMLProcessor::evaluateObject(const ObjectInfo& obj_info) {
+bool XMLProcessor::evaluateObject(const ObjectInfo& obj_info,
+                                  const GroupStack& groupStack) const {
     std::vector<bool> activeResults;
     bool hasActiveCriterion = false;
 
@@ -309,7 +264,7 @@ bool XMLProcessor::evaluateObject(const ObjectInfo& obj_info) {
 
         hasActiveCriterion = true;
 
-        std::string value = extractPropertyValue(obj_info, criterion);
+        std::string value = extractPropertyValue(obj_info, groupStack, criterion);
 
         bool matched = false;
         try {
@@ -328,7 +283,69 @@ bool XMLProcessor::evaluateObject(const ObjectInfo& obj_info) {
     return applyLogic(activeResults);
 }
 
-bool XMLProcessor::applyLogic(const std::vector<bool>& results) {
+std::string XMLProcessor::extractPropertyValue(
+    const ObjectInfo& obj_info,
+    const GroupStack& groupStack,
+    const SourceConfig::XmlFilterCriterion& criterion) const {
+    std::string path = criterion.path;
+
+    // Проверяем, является ли путь свойством группы
+    if (path.starts_with("ancestor::")) {
+        path = path.substr(10);  // Удаляем префикс "ancestor::"
+    }
+
+    size_t slashPos = path.find('/');
+    if (slashPos != std::string::npos) {
+        std::string firstPart = path.substr(0, slashPos);
+        std::string propertyPath = path.substr(slashPos + 1);
+
+        // Проверяем, является ли первая часть именем группы в стеке
+        for (auto it = groupStack.rbegin(); it != groupStack.rend(); ++it) {
+            if (it->name == firstPart) {
+                // Это свойство группы: ищем в свойствах группы
+                for (const auto& prop : it->properties) {
+                    if (prop.name == propertyPath) {
+                        return normalizeValue(prop.value);
+                    }
+                }
+                return "";
+            }
+        }
+
+        // ИСПРАВЛЕНИЕ: если первая часть не является именем группы,
+        // это свойство объекта (например, "docNumber/@value")
+        for (const auto& prop : obj_info.properties) {
+            if (prop.name == path) {
+                return normalizeValue(prop.value);
+            }
+        }
+        return "";
+    }
+
+    // Свойство объекта без слэша (атрибут объекта или текстовое свойство)
+    if (path.starts_with("@")) {
+        for (const auto& prop : obj_info.properties) {
+            if (prop.name == path) {
+                return normalizeValue(prop.value);
+            }
+        }
+        return "";
+    }
+
+    // Обычное текстовое свойство объекта
+    for (const auto& prop : obj_info.properties) {
+        if (prop.name == path) {
+            if (obj_info.has_cdata) {
+                return "";
+            }
+            return normalizeValue(prop.value);
+        }
+    }
+
+    return "";
+}
+
+bool XMLProcessor::applyLogic(const std::vector<bool>& results) const {
     if (results.empty()) {
         return false;
     }
@@ -374,14 +391,42 @@ bool XMLProcessor::applyLogic(const std::vector<bool>& results) {
     return false;
 }
 
-std::string XMLProcessor::normalizeValue(const std::string& value) {
-    return FilterListManager::normalizeValue(value);
+std::string XMLProcessor::buildOpeningTag(xmlTextReaderPtr reader) const {
+    std::string tag;
+    tag.reserve(256);
+
+    const xmlChar* full_name = xmlTextReaderConstName(reader);
+    if (!full_name) return "";
+
+    tag += '<';
+    tag += reinterpret_cast<const char*>(full_name);
+
+    if (xmlTextReaderMoveToFirstAttribute(reader) == 1) {
+        do {
+            const xmlChar* attr_name = xmlTextReaderConstName(reader);
+            const xmlChar* attr_value = xmlTextReaderConstValue(reader);
+            if (attr_name && attr_value) {
+                tag += ' ';
+                tag += reinterpret_cast<const char*>(attr_name);
+                tag += "=\"";
+                tag += reinterpret_cast<const char*>(attr_value);
+                tag += '"';
+            }
+        } while (xmlTextReaderMoveToNextAttribute(reader) == 1);
+
+        xmlTextReaderMoveToElement(reader);
+    }
+
+    tag += '>';
+    return tag;
 }
 
-void XMLProcessor::writeRootElement(FILE* file,
-                                    const RootInfo& root_info,
-                                    int record_count) {
+void XMLProcessor::writeRootElementWithPlaceholder(FILE* file,
+                                                   const RootInfo& root_info,
+                                                   size_t& placeholderPosition) const {
     if (!file) return;
+
+    placeholderPosition = 0;
 
     if (!root_info.xml_declaration.empty()) {
         fprintf(file, "%s\n", root_info.xml_declaration.c_str());
@@ -389,169 +434,141 @@ void XMLProcessor::writeRootElement(FILE* file,
         fprintf(file, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     }
 
-    fprintf(file, "<%s", root_info.name.c_str());
+    std::string rootTag = "<" + root_info.name;
 
     for (const auto& ns : root_info.namespace_declarations) {
         if (ns.first.empty()) {
-            fprintf(file, " xmlns=\"%s\"", ns.second.c_str());
+            rootTag += " xmlns=\"" + ns.second + "\"";
         } else {
-            fprintf(file, " xmlns:%s=\"%s\"", ns.first.c_str(), ns.second.c_str());
+            rootTag += " xmlns:" + ns.first + "=\"" + ns.second + "\"";
         }
     }
 
-    for (const auto& attr : root_info.attributes) {
-        fprintf(file, " %s=\"%s\"", attr.first.c_str(), attr.second.c_str());
-    }
-
-    if (record_count >= 0 && config_.xml_filter.record_count_config.enabled) {
-        const std::string& counterPath = config_.xml_filter.record_count_config.path;
+    // Определяем имя атрибута счётчика
+    std::string counterAttr;
+    if (config_.xml_filter.record_count_config.enabled) {
+        const std::string& counterPath =
+            config_.xml_filter.record_count_config.path;
         if (counterPath.starts_with("@")) {
-            std::string attrName = counterPath.substr(1);
-            fprintf(file, " %s=\"%d\"", attrName.c_str(), record_count);
+            counterAttr = counterPath.substr(1);
         }
     }
 
-    fprintf(file, ">\n");
+    bool countWritten = false;
+    for (const auto& attr : root_info.attributes) {
+        if (!counterAttr.empty() && attr.first == counterAttr) {
+            // Записываем заполнитель вместо счётчика
+            placeholderPosition = static_cast<size_t>(ftell(file)) +
+                                  rootTag.size() + 1 + counterAttr.size() + 2;
+            rootTag += " " + counterAttr + "=\"0000000000\"";
+            countWritten = true;
+        } else {
+            rootTag += " " + attr.first + "=\"" + attr.second + "\"";
+        }
+    }
+
+    if (!countWritten && !counterAttr.empty()) {
+        placeholderPosition = static_cast<size_t>(ftell(file)) +
+                              rootTag.size() + 1 + counterAttr.size() + 2;
+        rootTag += " " + counterAttr + "=\"0000000000\"";
+    }
+
+    rootTag += ">\n";
+    fwrite(rootTag.c_str(), 1, rootTag.size(), file);
 }
 
-void XMLProcessor::writeRootEndTag(FILE* file, const RootInfo& root_info) {
+void XMLProcessor::writeRootEndTag(FILE* file, const RootInfo& root_info) const {
     if (!file) return;
     fprintf(file, "</%s>\n", root_info.name.c_str());
 }
 
-void XMLProcessor::writeObject(FILE* file, xmlTextReaderPtr reader) {
-    if (!file || !reader) return;
+void XMLProcessor::flushGroupsBeforeObject(FILE* file, GroupStack& stack,
+                                           bool forExcluded) {
+    if (!file) return;
 
-    xmlChar* outerXml = xmlTextReaderReadOuterXml(reader);
-    if (outerXml) {
-        fwrite(outerXml, 1, xmlStrlen(outerXml), file);
-        fwrite("\n", 1, 1, file);
-        xmlFree(outerXml);
-    }
-}
+    for (auto& group : stack) {
+        bool alreadyWritten = forExcluded ? group.writtenToExcluded
+                                          : group.writtenToProcessed;
 
-void XMLProcessor::updateRecordCount(RootInfo& root_info, int record_count) {
-    if (!config_.xml_filter.record_count_config.enabled) {
-        return;
-    }
+        if (!alreadyWritten) {
+            // Записываем открывающий тег группы
+            fwrite(group.openingTag.c_str(), 1, group.openingTag.size(), file);
+            fwrite("\n", 1, 1, file);
 
-    const std::string& counterPath = config_.xml_filter.record_count_config.path;
+            // Записываем свойства группы
+            for (const auto& prop : group.propertiesXml) {
+                fwrite(prop.c_str(), 1, prop.size(), file);
+                fwrite("\n", 1, 1, file);
+            }
 
-    if (counterPath.starts_with("@")) {
-        std::string attrName = counterPath.substr(1);
-
-        bool found = false;
-        for (auto& attr : root_info.attributes) {
-            if (attr.first == attrName) {
-                attr.second = std::to_string(record_count);
-                found = true;
-                break;
+            // Помечаем группу как записанную
+            if (forExcluded) {
+                group.writtenToExcluded = true;
+            } else {
+                group.writtenToProcessed = true;
             }
         }
-
-        if (!found) {
-            root_info.attributes.push_back({attrName, std::to_string(record_count)});
-        }
     }
 }
 
-std::string XMLProcessor::getTempFilePath(const std::string& filename,
-                                          const std::string& prefix) {
-    std::string tempDir = config_.temp_dir;
-    if (tempDir.empty()) {
-        tempDir = "/var/xmlfilter/temp";
-    }
+void XMLProcessor::flushGroupClosing(FILE* file, GroupBuffer& group) const {
+    if (!file) return;
 
-    std::error_code ec;
-    fs::create_directories(tempDir, ec);
-
-    std::string tempPath = (fs::path(tempDir) / (prefix + "_" + filename)).string();
-    return tempPath;
+    std::string closingTag = "</" + group.name + ">";
+    fwrite(closingTag.c_str(), 1, closingTag.size(), file);
+    fwrite("\n", 1, 1, file);
 }
 
-void XMLProcessor::cleanupTempFiles(const std::vector<std::string>& paths) {
-    for (const auto& path : paths) {
-        std::error_code ec;
-        fs::remove(path, ec);
+void XMLProcessor::updateRecordCountInFile(const std::string& filePath,
+                                           int count,
+                                           size_t placeholderPosition) const {
+    if (placeholderPosition == 0) return;
+
+    FILE* file = fopen(filePath.c_str(), "r+b");
+    if (!file) return;
+
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%010d", count);
+
+    if (fseek(file, static_cast<long>(placeholderPosition), SEEK_SET) == 0) {
+        fwrite(buffer, 1, 10, file);
     }
+
+    fclose(file);
 }
 
 void XMLProcessor::streamingProcess(const std::string& xmlPath,
                                     ProcessingResult& result) {
-    // ===== ПЕРВЫЙ ПРОХОД: подсчёт объектов и определение результатов фильтрации =====
-    xmlTextReaderPtr readerPass1 = xmlReaderForFile(xmlPath.c_str(), nullptr,
-                                                    XML_PARSE_NOBLANKS |
-                                                    XML_PARSE_NONET |
-                                                    XML_PARSE_HUGE);
-    if (!readerPass1) {
+    if (logger_) {
+        logger_->Debug("XMLProcessor::streamingProcess: starting single pass for " +
+                       xmlPath);
+    }
+
+    xmlTextReaderPtr reader = xmlReaderForFile(xmlPath.c_str(), nullptr,
+                                               XML_PARSE_NOBLANKS |
+                                               XML_PARSE_NONET |
+                                               XML_PARSE_HUGE);
+    if (!reader) {
         result.error_type = ProcessingResult::ErrorType::PARSE;
         throw std::runtime_error("Failed to open XML file: " + xmlPath);
     }
 
     if (isBypassMode()) {
+        if (logger_) {
+            logger_->Debug("XMLProcessor::streamingProcess: bypass mode detected");
+        }
         result.bypass = true;
         result.success = true;
-        xmlFreeTextReader(readerPass1);
+        xmlFreeTextReader(reader);
         return;
     }
 
     RootInfo root_info;
-    int totalRecords = 0;
-    int matchedRecords = 0;
-    std::vector<bool> matchedFlags;  // Флаги совпадения для каждого объекта
-
-    try {
-        if (!extractRootInfo(readerPass1, root_info)) {
-            result.error_type = ProcessingResult::ErrorType::PARSE;
-            throw std::runtime_error("Failed to extract root info from XML file");
-        }
-
-        int ret = xmlTextReaderRead(readerPass1);
-        while (ret == 1) {
-            if (isObject(readerPass1)) {
-                totalRecords++;
-
-                xmlNodePtr subtree = xmlTextReaderExpand(readerPass1);
-                if (subtree) {
-                    xmlDocPtr tmpDoc = xmlNewDoc(BAD_CAST "1.0");
-                    xmlNodePtr copiedSubtree = xmlCopyNode(subtree, 1);
-                    xmlDocSetRootElement(tmpDoc, copiedSubtree);
-
-                    ObjectInfo obj_info;
-                    extractObjectPropertiesFromNode(copiedSubtree, obj_info);
-
-                    bool matched = evaluateObject(obj_info);
-                    matchedFlags.push_back(matched);
-                    if (matched) {
-                        matchedRecords++;
-                    }
-
-                    xmlFreeDoc(tmpDoc);
-                }
-
-                ret = xmlTextReaderNext(readerPass1);
-                continue;
-            }
-
-            ret = xmlTextReaderRead(readerPass1);
-        }
-
-        xmlFreeTextReader(readerPass1);
-
-    } catch (const std::exception&) {
-        xmlFreeTextReader(readerPass1);
-        throw;
+    if (!extractRootInfo(reader, root_info)) {
+        xmlFreeTextReader(reader);
+        result.error_type = ProcessingResult::ErrorType::PARSE;
+        throw std::runtime_error("Failed to extract root info from XML file");
     }
-
-    // ===== ВТОРОЙ ПРОХОД: запись выходных файлов с обновлёнными счётчиками =====
-    int processedCount = totalRecords - matchedRecords;
-    int excludedCount = matchedRecords;
-
-    RootInfo processedRootInfo = root_info;
-    RootInfo excludedRootInfo = root_info;
-
-    updateRecordCount(processedRootInfo, processedCount);
-    updateRecordCount(excludedRootInfo, excludedCount);
 
     std::string filename = fs::path(xmlPath).filename().string();
     std::string processedTmpPath = getTempFilePath(filename, "proc");
@@ -564,92 +581,230 @@ void XMLProcessor::streamingProcess(const std::string& xmlPath,
         excludedFile = fopen(excludedTmpPath.c_str(), "wb");
     }
 
-    if (!processedFile || (!config_.excluded_dir.empty() && !excludedFile)) {
-        if (processedFile) fclose(processedFile);
+    if (!processedFile) {
         if (excludedFile) fclose(excludedFile);
+        xmlFreeTextReader(reader);
         result.error_type = ProcessingResult::ErrorType::WRITE;
-        throw std::runtime_error("Failed to open temporary files");
+        throw std::runtime_error("Failed to open temporary processed file");
     }
 
-    // Записываем корневые элементы с обновлёнными счётчиками
-    writeRootElement(processedFile, processedRootInfo, -1);
+    // Записываем корневые элементы с заполнителями для счётчиков
+    size_t processedCountPos = 0;
+    size_t excludedCountPos = 0;
+
+    writeRootElementWithPlaceholder(processedFile, root_info, processedCountPos);
     if (excludedFile) {
-        writeRootElement(excludedFile, excludedRootInfo, -1);
+        writeRootElementWithPlaceholder(excludedFile, root_info, excludedCountPos);
     }
 
-    xmlTextReaderPtr readerPass2 = xmlReaderForFile(xmlPath.c_str(), nullptr,
-                                                    XML_PARSE_NOBLANKS |
-                                                    XML_PARSE_NONET |
-                                                    XML_PARSE_HUGE);
-    if (!readerPass2) {
-        fclose(processedFile);
-        if (excludedFile) fclose(excludedFile);
-        result.error_type = ProcessingResult::ErrorType::PARSE;
-        throw std::runtime_error("Failed to open XML file for second pass: " + xmlPath);
-    }
+    // Инициализируем стек групп
+    GroupStack groupStack;
+
+    int totalRecords = 0;
+    int matchedRecords = 0;
 
     try {
-        // Пропускаем корневой элемент
-        extractRootInfo(readerPass2, root_info);
-
-        int objectIndex = 0;
-        int ret = xmlTextReaderRead(readerPass2);
+        int ret = xmlTextReaderRead(reader);
         while (ret == 1) {
-            if (isObject(readerPass2)) {
-                bool matched = (objectIndex < static_cast<int>(matchedFlags.size()))
-                                   ? matchedFlags[objectIndex]
-                                   : false;
-                objectIndex++;
+            int type = xmlTextReaderNodeType(reader);
 
-                xmlNodePtr subtree = xmlTextReaderExpand(readerPass2);
-                if (subtree) {
-                    xmlDocPtr tmpDoc = xmlNewDoc(BAD_CAST "1.0");
-                    xmlNodePtr copiedSubtree = xmlCopyNode(subtree, 1);
-                    xmlDocSetRootElement(tmpDoc, copiedSubtree);
+            if (type == XML_READER_TYPE_ELEMENT) {
+                bool isEmpty = (xmlTextReaderIsEmptyElement(reader) == 1);
 
-                    xmlBufferPtr buf = xmlBufferCreate();
-                    xmlNodeDump(buf, tmpDoc, copiedSubtree, 0, 0);
+                if (isObject(reader)) {
+    totalRecords++;
 
-                    if (matched) {
-                        if (excludedFile) {
-                            fwrite(xmlBufferContent(buf), 1, xmlBufferLength(buf), excludedFile);
-                            fwrite("\n", 1, 1, excludedFile);
-                        }
-                    } else {
-                        if (processedFile) {
-                            fwrite(xmlBufferContent(buf), 1, xmlBufferLength(buf), processedFile);
-                            fwrite("\n", 1, 1, processedFile);
+    if (totalRecords % 1000 == 0) {
+        if (logger_) {
+            logger_->Debug("Processing progress: " +
+                           std::to_string(totalRecords) +
+                           " objects processed, groups in stack=" +
+                           std::to_string(groupStack.size()));
+        }
+    }
+
+    bool matched = false;
+    xmlChar* outerXml = nullptr;
+
+    if (!isEmpty) {
+        outerXml = xmlTextReaderReadOuterXml(reader);
+        if (outerXml) {
+            // ДИАГНОСТИКА: логируем первые 200 символов объекта
+            if (totalRecords <= 3) {
+                if (logger_) {
+                    std::string preview(reinterpret_cast<const char*>(outerXml));
+                    if (preview.size() > 200) preview = preview.substr(0, 200);
+                    logger_->Debug("Object " + std::to_string(totalRecords) +
+                                   " outerXml preview: " + preview);
+                }
+            }
+
+            xmlDocPtr objDoc = xmlReadDoc(outerXml, nullptr, nullptr,
+                                          XML_PARSE_NOBLANKS |
+                                          XML_PARSE_NONET |
+                                          XML_PARSE_HUGE);
+            if (objDoc) {
+                xmlNodePtr objRoot = xmlDocGetRootElement(objDoc);
+                if (objRoot) {
+                    ObjectInfo obj_info;
+                    extractObjectPropertiesFromNode(objRoot, obj_info);
+
+                    // ДИАГНОСТИКА: логируем количество извлечённых свойств
+                    if (totalRecords <= 3) {
+                        if (logger_) {
+                            logger_->Debug("Object " + std::to_string(totalRecords) +
+                                           " properties count=" +
+                                           std::to_string(obj_info.properties.size()));
+                            for (const auto& prop : obj_info.properties) {
+                                logger_->Debug("  Property: " + prop.name +
+                                               " = " + prop.value);
+                            }
                         }
                     }
 
-                    xmlBufferFree(buf);
-                    xmlFreeDoc(tmpDoc);
+                    matched = evaluateObject(obj_info, groupStack);
+
+                    // ДИАГНОСТИКА: логируем результат оценки
+                    if (totalRecords <= 3) {
+                        if (logger_) {
+                            logger_->Debug("Object " + std::to_string(totalRecords) +
+                                           " matched=" + std::to_string(matched));
+                        }
+                    }
+                } else {
+                    if (logger_) {
+                        logger_->Warning("Object " + std::to_string(totalRecords) +
+                                         " objRoot is nullptr");
+                    }
                 }
-
-                ret = xmlTextReaderNext(readerPass2);
-                continue;
+                xmlFreeDoc(objDoc);
+            } else {
+                if (logger_) {
+                    logger_->Warning("Object " + std::to_string(totalRecords) +
+                                     " objDoc is nullptr (parse failed)");
+                }
             }
+        }
+    }
 
-            ret = xmlTextReaderRead(readerPass2);
+    if (matched) {
+        matchedRecords++;
+        if (excludedFile) {
+            flushGroupsBeforeObject(excludedFile, groupStack, true);
+            if (outerXml) {
+                fwrite(outerXml, 1, xmlStrlen(outerXml), excludedFile);
+                fwrite("\n", 1, 1, excludedFile);
+            }
+        }
+    } else {
+        flushGroupsBeforeObject(processedFile, groupStack, false);
+        if (outerXml) {
+            fwrite(outerXml, 1, xmlStrlen(outerXml), processedFile);
+            fwrite("\n", 1, 1, processedFile);
+        }
+    }
+
+    if (outerXml) {
+        xmlFree(outerXml);
+    }
+
+    ret = xmlTextReaderNext(reader);
+    continue;
+} else if (isEmpty) {
+    xmlChar* outerXml = xmlTextReaderReadOuterXml(reader);
+    if (outerXml && !groupStack.empty()) {
+        std::string propXml(reinterpret_cast<const char*>(outerXml));
+
+        GroupBuffer& currentGroup = groupStack.back();
+
+        // Если группа записана в processed, записываем свойство в processed
+        if (currentGroup.writtenToProcessed) {
+            fwrite(propXml.c_str(), 1, propXml.size(), processedFile);
+            fwrite("\n", 1, 1, processedFile);
+        } else {
+            // Группа ещё не записана, добавляем свойство в буфер
+            currentGroup.propertiesXml.push_back(propXml);
         }
 
-        xmlFreeTextReader(readerPass2);
+        // Если группа записана в excluded, записываем свойство в excluded
+        if (currentGroup.writtenToExcluded && excludedFile) {
+            fwrite(propXml.c_str(), 1, propXml.size(), excludedFile);
+            fwrite("\n", 1, 1, excludedFile);
+        }
+
+        xmlFree(outerXml);
+    } else if (outerXml) {
+        xmlFree(outerXml);
+    }
+
+    ret = xmlTextReaderNext(reader);
+    continue;
+} else {
+                    // ===== НЕПУСТОЙ ЭЛЕМЕНТ (группа) =====
+                    GroupBuffer group;
+                    const xmlChar* name = xmlTextReaderConstName(reader);
+                    if (name) {
+                        group.name = reinterpret_cast<const char*>(name);
+                    }
+                    group.openingTag = buildOpeningTag(reader);
+                    group.writtenToProcessed = false;
+                    group.writtenToExcluded = false;
+
+                    extractGroupProperties(reader, group);
+
+                    groupStack.push_back(std::move(group));
+
+                    ret = xmlTextReaderRead(reader);
+                    continue;
+                }
+            } else if (type == XML_READER_TYPE_END_ELEMENT) {
+                // ===== ВЫХОД ИЗ ГРУППЫ =====
+                if (!groupStack.empty()) {
+                    GroupBuffer group = std::move(groupStack.back());
+                    groupStack.pop_back();
+
+                    if (group.writtenToProcessed) {
+                        flushGroupClosing(processedFile, group);
+                    }
+                    if (group.writtenToExcluded && excludedFile) {
+                        flushGroupClosing(excludedFile, group);
+                    }
+                }
+            }
+
+            ret = xmlTextReaderRead(reader);
+        }
+
+        xmlFreeTextReader(reader);
 
     } catch (const std::exception&) {
         fclose(processedFile);
         if (excludedFile) fclose(excludedFile);
-        xmlFreeTextReader(readerPass2);
+        xmlFreeTextReader(reader);
         throw;
     }
 
     // Записываем закрывающие теги корневых элементов
-    writeRootEndTag(processedFile, processedRootInfo);
+    writeRootEndTag(processedFile, root_info);
     if (excludedFile) {
-        writeRootEndTag(excludedFile, excludedRootInfo);
+        writeRootEndTag(excludedFile, root_info);
     }
 
     fclose(processedFile);
     if (excludedFile) fclose(excludedFile);
+
+    int processedCount = totalRecords - matchedRecords;
+    int excludedCount = matchedRecords;
+
+    // Обновляем счётчики во временных файлах
+    if (processedCountPos > 0) {
+        updateRecordCountInFile(processedTmpPath, processedCount,
+                                processedCountPos);
+    }
+    if (excludedFile && excludedCountPos > 0) {
+        updateRecordCountInFile(excludedTmpPath, excludedCount,
+                                excludedCountPos);
+    }
 
     // Перемещаем временные файлы в целевые директории
     std::string processedDstPath = (fs::path(config_.processed_dir) /
@@ -662,63 +817,30 @@ void XMLProcessor::streamingProcess(const std::string& xmlPath,
         throw std::runtime_error("Failed to move processed file: " + ec.message());
     }
 
-    if (excludedFile && matchedRecords > 0 && !config_.excluded_dir.empty()) {
+    if (excludedFile && excludedCount > 0 && !config_.excluded_dir.empty()) {
         std::string excludedDstPath = (fs::path(config_.excluded_dir) /
                                        config_.getExcludedFileName(filename)).string();
         fs::create_directories(config_.excluded_dir, ec);
         fs::rename(excludedTmpPath, excludedDstPath, ec);
         if (ec) {
             result.error_type = ProcessingResult::ErrorType::WRITE;
-            throw std::runtime_error("Failed to move excluded file: " + ec.message());
+            throw std::runtime_error("Failed to move excluded file: " +
+                                     ec.message());
         }
+    } else if (excludedFile) {
+        fs::remove(excludedTmpPath, ec);
     }
 
     result.success = true;
     result.records_processed = static_cast<size_t>(totalRecords);
     result.records_matched = static_cast<size_t>(matchedRecords);
     result.records_kept = static_cast<size_t>(processedCount);
-}
 
-void XMLProcessor::extractObjectPropertiesFromNode(xmlNodePtr node,
-                                                   ObjectInfo& obj_info) {
-    // Извлекаем атрибуты объекта
-    for (xmlAttrPtr attr = node->properties; attr; attr = attr->next) {
-        xmlChar* attrValue = xmlNodeListGetString(node->doc, attr->children, 1);
-        if (attrValue) {
-            std::string aname = reinterpret_cast<const char*>(attr->name);
-            std::string avalue = reinterpret_cast<const char*>(attrValue);
-            obj_info.properties.push_back({"@" + aname, avalue});
-            xmlFree(attrValue);
-        }
-    }
-
-    // Обходим дочерние элементы объекта для извлечения свойств-элементов
-    for (xmlNodePtr child = node->children; child; child = child->next) {
-        if (child->type == XML_ELEMENT_NODE) {
-            std::string childName = reinterpret_cast<const char*>(child->name);
-
-            // Извлекаем атрибуты свойства
-            for (xmlAttrPtr attr = child->properties; attr; attr = attr->next) {
-                xmlChar* attrValue = xmlNodeListGetString(child->doc, attr->children, 1);
-                if (attrValue) {
-                    std::string aname = reinterpret_cast<const char*>(attr->name);
-                    std::string avalue = reinterpret_cast<const char*>(attrValue);
-                    obj_info.properties.push_back(
-                        {childName + "/@" + aname, avalue});
-                    xmlFree(attrValue);
-                }
-            }
-
-            // Извлекаем текстовое содержимое свойства
-            xmlChar* text = xmlNodeGetContent(child);
-            if (text) {
-                std::string value = reinterpret_cast<const char*>(text);
-                obj_info.properties.push_back({childName, value});
-                xmlFree(text);
-            }
-        } else if (child->type == XML_CDATA_SECTION_NODE) {
-            obj_info.has_cdata = true;
-        }
+    if (logger_) {
+        logger_->Debug("XMLProcessor::streamingProcess: completed, total=" +
+                       std::to_string(totalRecords) + ", matched=" +
+                       std::to_string(matchedRecords) + ", kept=" +
+                       std::to_string(processedCount));
     }
 }
 

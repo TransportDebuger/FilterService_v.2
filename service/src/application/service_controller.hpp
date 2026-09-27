@@ -18,6 +18,7 @@
 #include "../infrastructure/configuration/config_reload_transaction.hpp"
 #include "../infrastructure/configuration/configuration_service.hpp"
 #include "../infrastructure/system/pid_file_manager.hpp"
+#include "../infrastructure/metrics/metrics_http_server.hpp"
 #include "argumentparser.hpp"
 #include "master.hpp"
 #include "stc/logger/ilogger.hpp"
@@ -69,6 +70,8 @@ class ServiceController {
   std::shared_ptr<stc::FilterListManager> filter_list_manager_;
   /// @private Сервис управления конфигурацией.
   std::unique_ptr<ConfigurationService> config_service_;
+  /// @private HTTP-сервер для экспозиции метрик.
+  std::unique_ptr<MetricsHttpServer> metrics_server_;
 
   /// @private Дескрипторы общих метрик.
   GlobalMetricsDescriptors global_metrics_;

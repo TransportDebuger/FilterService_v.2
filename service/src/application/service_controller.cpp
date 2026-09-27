@@ -132,6 +132,15 @@ void ServiceController::Initialize(const ApplicationConfiguration& config) {
   signal_router_->Start();
   logger_->Info("SignalRouter started successfully.");
 
+  if (config.metrics_port > 0) {
+        metrics_server_ = std::make_unique<MetricsHttpServer>(
+            config.metrics_port, 
+            [this]() { return GetMetricsPayload(); }
+        );
+        metrics_server_->Start();
+        if (logger_) logger_->Info("Metrics HTTP server started on port " + std::to_string(config.metrics_port));
+  }
+
   master_ = std::make_unique<Master>(logger_, metrics_registry_,
                                      global_metrics_, filter_list_manager_);
   master_->start(config);
@@ -172,18 +181,28 @@ void ServiceController::MainLoop() {
 
 void ServiceController::HandleShutdown() {
   if (logger_) logger_->Info("HandleShutdown: initiating graceful shutdown...");
+
+  if (metrics_server_) {
+        if (logger_) logger_->Info("HandleShutdown: stopping metrics HTTP server...");
+        metrics_server_->Stop();
+        metrics_server_.reset();
+  }
+
   if (master_) {
     if (logger_)
       logger_->Info("HandleShutdown: stopping master and workers...");
     master_->stop();
     if (logger_) logger_->Info("HandleShutdown: master stopped.");
   }
+
   if (signal_router_) {
     if (logger_) logger_->Info("HandleShutdown: stopping signal router...");
     signal_router_->Stop();
     if (logger_) logger_->Info("HandleShutdown: signal router stopped.");
   }
+
   if (pid_file_mgr_) pid_file_mgr_->remove();
+  
   if (logger_) {
     logger_->Info("Service shutdown complete.");
     logger_->Flush();

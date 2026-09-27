@@ -1,16 +1,16 @@
 /**
 @file XMLProcessor.hpp
 @brief Потоковый процессор для обработки, фильтрации и сохранения результатов
-XML-файлов.
-@version 4.0.0
-@date 2026-09-06
+XML-файлов с поддержкой иерархических групп.
+@version 5.0.0
+@date 2026-09-27
 */
 #pragma once
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <libxml/xmlreader.h>
 #include <libxml/xmlstring.h>
-#include <libxml/xmlwriter.h>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -37,7 +37,8 @@ struct ProcessingResult {
 
 /**
 @class XMLProcessor
-@brief Выполняет многокритериальную потоковую фильтрацию XML-документов.
+@brief Выполняет многокритериальную потоковую фильтрацию XML-документов
+с поддержкой иерархических групп и ленивой записью.
 */
 class XMLProcessor {
 public:
@@ -101,14 +102,38 @@ private:
         bool has_cdata{false};
     };
 
-    /// @private Выполняет потоковую обработку файла.
+    /**
+    @struct GroupBuffer
+    @brief Буфер для группы в стеке однопроходной обработки.
+    */
+    struct GroupBuffer {
+        /// @private Имя элемента группы.
+        std::string name;
+
+        /// @private Открывающий тег группы с атрибутами.
+        std::string openingTag;
+
+        /// @private Свойства группы в формате внешнего XML для записи в файлы.
+        std::vector<std::string> propertiesXml;
+
+        /// @private Свойства группы для оценки критериев объектов.
+        std::vector<Property> properties;
+
+        /// @private Флаг записи открывающего тега в processed.
+        bool writtenToProcessed{false};
+
+        /// @private Флаг записи открывающего тега в excluded.
+        bool writtenToExcluded{false};
+    };
+
+    /// @private Стек групп для однопроходной обработки.
+    using GroupStack = std::vector<GroupBuffer>;
+
+    /// @private Выполняет однопроходную потоковую обработку файла.
     void streamingProcess(const std::string& xmlPath, ProcessingResult& result);
 
     /// @private Проверяет режим bypass.
     bool isBypassMode() const;
-
-    /// @private Копирует файл без изменений.
-    void copyFileBypass(const std::string& srcPath, const std::string& dstPath);
 
     /// @private Извлекает информацию о корневом элементе.
     bool extractRootInfo(xmlTextReaderPtr reader, RootInfo& root_info);
@@ -116,44 +141,57 @@ private:
     /// @private Распознаёт объект по имени и пространству имён.
     bool isObject(xmlTextReaderPtr reader) const;
 
-    /// @private Извлекает свойства объекта.
-    void extractObjectProperties(xmlTextReaderPtr reader, ObjectInfo& obj_info);
+    /// @private Извлекает свойства объекта из узла.
+    void extractObjectPropertiesFromNode(xmlNodePtr node,
+                                         ObjectInfo& obj_info) const;
 
-    /// @private Оценивает объект по критериям.
-    bool evaluateObject(const ObjectInfo& obj_info);
+    /// @private Оценивает объект по критериям, включая свойства групп из стека.
+    bool evaluateObject(const ObjectInfo& obj_info,
+                        const GroupStack& groupStack) const;
 
-    /// @private Извлекает значение свойства по пути.
+    /// @private Извлекает значение свойства по пути из объекта и групп.
     std::string extractPropertyValue(
         const ObjectInfo& obj_info,
-        const SourceConfig::XmlFilterCriterion& criterion);
+        const GroupStack& groupStack,
+        const SourceConfig::XmlFilterCriterion& criterion) const;
 
     /// @private Нормализует значение свойства.
     static std::string normalizeValue(const std::string& value);
 
     /// @private Применяет логический оператор к результатам критериев.
-    bool applyLogic(const std::vector<bool>& results);
+    bool applyLogic(const std::vector<bool>& results) const;
 
-    /// @private Записывает открывающий тег корневого элемента.
-    void writeRootElement(FILE* file, const RootInfo& root_info, int record_count);
+    /// @private Записывает корневой элемент с заполнителем счётчика.
+    void writeRootElementWithPlaceholder(FILE* file, const RootInfo& root_info,
+                                         size_t& placeholderPosition) const;
 
     /// @private Записывает закрывающий тег корневого элемента.
-    void writeRootEndTag(FILE* file, const RootInfo& root_info);
+    void writeRootEndTag(FILE* file, const RootInfo& root_info) const;
 
-    /// @private Записывает объект в файл.
-    void writeObject(FILE* file, xmlTextReaderPtr reader);
+    /// @private Формирует открывающий тег элемента из текущей позиции читателя.
+    std::string buildOpeningTag(xmlTextReaderPtr reader) const;
 
-    /// @private Обновляет значение счётчика в корневом элементе.
-    void updateRecordCount(RootInfo& root_info, int record_count);
+    /// @private Извлекает свойства группы из узла для оценки критериев.
+    void extractGroupProperties(xmlTextReaderPtr reader,
+                                GroupBuffer& group) const;
+
+    /// @private Записывает открывающие теги групп и их свойства в файл.
+    void flushGroupsBeforeObject(FILE* file, GroupStack& stack,
+                                 bool forExcluded);
+
+    /// @private Записывает свойства группы и закрывающий тег в файл.
+    void flushGroupClosing(FILE* file, GroupBuffer& group) const;
+
+    /// @private Обновляет счётчик в файле по позиции заполнителя.
+    void updateRecordCountInFile(const std::string& filePath, int count,
+                                 size_t placeholderPosition) const;
 
     /// @private Формирует путь к временному файлу.
     std::string getTempFilePath(const std::string& filename,
-                                const std::string& prefix);
+                                const std::string& prefix) const;
 
     /// @private Удаляет временные файлы.
-    void cleanupTempFiles(const std::vector<std::string>& paths);
-
-    /// @private Извлекает свойства объекта из узла.
-    void extractObjectPropertiesFromNode(xmlNodePtr node, ObjectInfo& obj_info);
+    void cleanupTempFiles(const std::vector<std::string>& paths) const;
 };
 
 }  // namespace stc

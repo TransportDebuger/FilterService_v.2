@@ -32,6 +32,9 @@ struct ApplicationConfiguration {
 
   /// @brief Путь к глобальному CSV-файлу списков фильтрации.
   std::string global_comparison_list;
+
+  /// @brief TCP-порт для HTTP-сервера экспозиции метрик (0 = отключено).
+  uint16_t metrics_port{0};
 };
 
 }  // namespace stc

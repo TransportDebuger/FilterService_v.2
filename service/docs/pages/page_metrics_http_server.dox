@@ -1,0 +1,103 @@
+/**
+ * @page page_metrics_http_server Модуль экспозиции метрик HTTP
+ *
+ * @section sec_mhs_overview Обзор
+ *
+ * Класс @ref stc::MetricsHttpServer реализует минималистичный
+ * HTTP-сервер для отдачи текстового дампа метрик в формате
+ * Prometheus Text Exposition по эндпоинту `/metrics`.
+ * Модуль является инфраструктурным адаптером и интегрируется
+ * в корень композиции @ref stc::ServiceController.
+ *
+ * @section sec_mhs_architecture Архитектурные обоснования
+ *
+ * @subsection sub_mhs_sockets Выбор сетевого стека
+ *
+ * Реализация базируется на нативных POSIX-сокетах (BSD sockets)
+ * вместо использования внешних HTTP-фреймворков.
+ *
+ * Обоснование:
+ * - Сервис обрабатывает единственный эндпоинт (`GET /metrics`).
+ * - Внедрение HTTP-фреймворка усложняет граф зависимостей.
+ * - Прямое управление файловыми дескрипторами обеспечивает
+ *   предсказуемое поведение при graceful shutdown.
+ *
+ * @subsection sub_mhs_threading Модель ввода-вывода
+ *
+ * Фоновый поток использует системный вызов `poll()` с таймаутом
+ * 500 мс для ожидания новых соединений.
+ *
+ * Обоснование:
+ * - Prometheus использует pull-модель с интервалом опроса
+ *   от 5 до 60 секунд. Нагрузка на сокет близка к нулю.
+ * - Использование `epoll` избыточно для одного дескриптора.
+ * - Таймаут в `poll()` необходим для периодической проверки
+ *   `std::stop_token`, что гарантирует кооперативную остановку
+ *   потока без зависания на системном вызове `accept()`.
+ *
+ * @subsection sub_mhs_http Протокол HTTP
+ *
+ * Сервер намеренно не поддерживает HTTP Keep-Alive. Каждый
+ * ответ завершается заголовком `Connection: close`.
+ *
+ * Обоснование:
+ * - Клиент устанавливает новое TCP-соединение для каждого
+ *   scrape-запроса.
+ * - Поддержка Keep-Alive потребовала бы реализации парсера
+ *   HTTP-заголовков и механизма таймаутов простоя.
+ *
+ * @section sec_mhs_concurrency Потокобезопасность
+ *
+ * Вызов делегата получения payload из потока HTTP-сервера
+ * потокобезопасен. Внутри @ref stc::metrics::MetricsRegistry
+ * используется `std::shared_lock`, который не блокирует
+ * рабочие потоки (@ref stc::Worker), так как они обновляют
+ * метрики через lock-free атомарные примитивы.
+ *
+ * @warning Вызов делегата не должен содержать блокировок,
+ *          зависящих от рабочих потоков, во избежание
+ *          взаимных блокировок (deadlock).
+ *
+ * @section sec_mhs_lifecycle Управление жизненным циклом
+ *
+ * Остановка сервера (@ref stc::MetricsHttpServer::Stop)
+ * гарантирует детерминированное завершение фонового потока.
+ *
+ * Алгоритм остановки:
+ * 1. Вызов `request_stop()` у `std::jthread`.
+ * 2. Системный вызов `shutdown(fd, SHUT_RDWR)`.
+ * 3. Системный вызов `close(fd)`.
+ * 4. Ожидание завершения потока (`join()`).
+ *
+ * Порядок 2 и 3 критичен: `shutdown()` прерывает блокирующий
+ * `poll()` или `accept()`, возвращая управление в цикл
+ * проверки `std::stop_token`.
+ *
+ * @section sec_mhs_diagram Диаграмма взаимодействия
+ *
+ * @dot
+ * digraph MetricsHttpInteraction {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     { rank=same; Prometheus; MetricsHttpServer; }
+ *
+ *     Prometheus [label="Prometheus Server"];
+ *     MetricsHttpServer [label="MetricsHttpServer"];
+ *     ServiceController [label="ServiceController"];
+ *     MetricsRegistry [label="MetricsRegistry"];
+ *
+ *     Prometheus -> MetricsHttpServer [label="GET /metrics"];
+ *     MetricsHttpServer -> ServiceController
+ *         [label="payload_provider()"];
+ *     ServiceController -> MetricsRegistry
+ *         [label="ExportToPrometheus()"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::MetricsHttpServer
+ * @see @ref stc::ServiceController
+ * @see @ref stc::metrics::MetricsRegistry
+ */
