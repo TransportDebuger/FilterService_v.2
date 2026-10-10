@@ -1,0 +1,80 @@
+/**
+ * @class stc::Worker
+ *
+ * @details
+ * Класс инкапсулирует жизненный цикл мониторинга и обработки
+ * файлов для одного конкретного источника данных
+ * (@ref stc::SourceConfig). Является фундаментальной единицей
+ * параллелизма в архитектуре сервиса.
+ *
+ * @subsection sub_worker_thread Модель потоков и событий
+ *
+ * Воркер использует гибридную модель выполнения. Фоновый поток
+ * (@c worker_thread_) выполняет метод @c run(), который
+ * отвечает исключительно за управление состоянием (пауза,
+ * остановка) и периодический сбор статистики.
+ *
+ * Непосредственное обнаружение и обработка файлов
+ * инициируются асинхронно через callback-механизм
+ * полиморфного адаптера (@ref stc::IFileStorage). При
+ * возникновении события адаптер вызывает @c processFile()
+ * в контексте своего собственного потока или пула потоков.
+ * Это разделение ответственности позволяет адаптироваться
+ * к специфике хранилищ (например, @c inotify для локальных
+ * файлов или @c polling для FTP).
+ *
+ * @subsection sub_worker_deadlock Предотвращение Deadlock
+ *
+ * Критическим архитектурным решением является строгий
+ * порядок освобождения ресурсов при graceful shutdown.
+ * В методе @c stop() мьютекс @c state_mutex_
+ * принудительно освобождается (через выход из области
+ * видимости @c std::lock_guard) до вызова
+ * @c adapter_->stopMonitoring() и @c worker_thread_.join().
+ *
+ * Если бы мьютекс удерживался во время @c join(), возник
+ * бы классический deadlock: фоновый поток @c run()
+ * пытался бы захватить @c state_mutex_ для проверки
+ * условия выхода из @c cv_.wait_for(), в то время как
+ * основной поток ожидал бы завершения @c join().
+ *
+ * @subsection sub_worker_processing Обработка и метрики
+ *
+ * Метод @c processFile() реализует конвейер обработки:
+ * вычисление SHA-256 хэша (OpenSSL), вызов
+ * @ref stc::XMLProcessor и атомарное перемещение файла
+ * в директорию @c processed или @c bad.
+ *
+ * Для обеспечения непрерывности телеметрии воркер
+ * инкапсулирует расчет скользящего среднего времени
+ * обработки (@c avg_duration_) и обновление как
+ * глобальных (@ref stc::GlobalMetricsDescriptors),
+ * так и пер-источниковых метрик. Флаг @c processing_
+ * используется методом @c stopGracefully() для
+ * ожидания завершения текущей транзакции перед
+ * принудительной остановкой.
+ *
+ * @dot
+ * digraph WorkerLifecycle {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Worker [label="Worker\n(Background Thread)"];
+ *     Adapter [label="IFileStorage\n(Event Source)"];
+ *     Proc [label="XMLProcessor"];
+ *     FS [label="File System"];
+ *
+ *     Adapter -> Worker [label="callback:\nprocessFile()"];
+ *     Worker -> Proc [label="process()"];
+ *     Worker -> FS [label="move / hash"];
+ * }
+ * @enddot
+ *
+ * @see stc::Master
+ * @see stc::IFileStorage
+ * @see stc::XMLProcessor
+ *
+ * @since 3.2.0
+ */

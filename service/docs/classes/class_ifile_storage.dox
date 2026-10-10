@@ -1,0 +1,76 @@
+/**
+ * @class stc::IFileStorage
+ *
+ * @details
+ * Абстрактный интерфейс (порт) в Domain-слое, реализующий
+ * принцип инверсии зависимостей (DIP). Он изолирует
+ * бизнес-логику обработки файлов (@ref stc::Worker) от
+ * специфики конкретных инфраструктурных адаптеров
+ * (локальная файловая система, FTP).
+ *
+ * @subsection sub_ifs_dip Архитектурная изоляция (DIP)
+ *
+ * Интерфейс намеренно лишен зависимостей от инфраструктурных
+ * компонентов, таких как диспетчер логирования
+ * (@ref stc::logger::ILogger). Это обеспечивает чистоту
+ * контракта и позволяет тестировать адаптеры в изоляции.
+ * Логирование и обработка ошибок делегируются на уровень
+ * инфраструктуры или вызывающему коду.
+ *
+ * @subsection sub_ifs_events Абстракция моделей обнаружения
+ *
+ * Порт унифицирует принципиально разные модели мониторинга
+ * файловых событий. Методы `startMonitoring()` и
+ * `setCallback()` позволяют адаптерам инкапсулировать
+ * внутреннюю механику:
+ * - Для локальных хранилищ (`LocalStorageAdapter`)
+ *   используется событийная модель на базе `inotify(7)`
+ *   или polling через `stc::fs::DirectoryMonitor`.
+ * - Для сетевых протоколов (`FtpFileAdapter`) эмулируется
+ *   событийная модель посредством внутреннего polling-цикла.
+ *
+ * @subsection sub_ifs_security Защита от Path Traversal
+ *
+ * Защищенный метод `validatePath()` реализует базовую
+ * проверку входных аргументов на наличие последовательностей
+ * `..`. Это критическое требование безопасности
+ * (Defensive Programming), предотвращающее уязвимости
+ * Path Traversal при работе с внешними конфигурациями
+ * и путями.
+ *
+ * @subsection sub_ifs_lifecycle Жизненный цикл соединения
+ *
+ * Контракт регламентирует строгий порядок вызовов:
+ * `connect()` -> `startMonitoring()` -> `stopMonitoring()`
+ * -> `disconnect()`. Нарушение этой последовательности
+ * (например, вызов `startMonitoring()` до `connect()`)
+ * должно приводить к генерации исключений на уровне
+ * конкретных реализаций.
+ *
+ * @dot
+ * digraph IFileStorageHierarchy {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Worker [label="Worker\n(Domain)"];
+ *     Port [label="IFileStorage\n(Port / Interface)"];
+ *     Local [label="LocalStorageAdapter\n(Infrastructure)"];
+ *     Ftp [label="FtpFileAdapter\n(Infrastructure)"];
+ *
+ *     Worker -> Port [label="uses", style=dashed,
+ *                     arrowhead=open];
+ *     Local -> Port [label="implements", style=dashed,
+ *                    arrowhead=empty];
+ *     Ftp -> Port [label="implements", style=dashed,
+ *                  arrowhead=empty];
+ * }
+ * @enddot
+ *
+ * @see stc::Worker
+ * @see stc::LocalStorageAdapter
+ * @see stc::FtpFileAdapter
+ *
+ * @since 2.0.0
+ */

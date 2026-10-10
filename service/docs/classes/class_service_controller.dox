@@ -1,0 +1,89 @@
+/**
+ * @class stc::ServiceController
+ *
+ * @details
+ * Класс является корнем композиции (Composition Root) и
+ * оркестратором жизненного цикла приложения XmlFilterService.
+ * Он инкапсулирует инициализацию, связывание зависимостей и
+ * управление завершением работы всех подсистем.
+ *
+ * @subsection sub_arch_composition_root Корень композиции
+ * Класс централизует внедрение зависимостей (Dependency
+ * Injection). Все
+ * инфраструктурные адаптеры (логирование, метрики, сигналы,
+ * PID-файл) и доменные компоненты (Master, FilterListManager)
+ * создаются и связываются в единой точке входа метода @c Run.
+ *
+ * @subsection sub_arch_lifecycle Управление жизненным циклом
+ * Метод @c Run реализует строгую последовательность инициализации:
+ * 1. Блокировка сигналов POSIX на уровне потока.
+ * 2. Парсинг аргументов командной строки.
+ * 3. Запись PID-файла (гарантия единственности экземпляра).
+ * 4. Сборка конфигурации (Configuration Pipeline).
+ * 5. Инициализация логгера и реестра метрик.
+ * 6. Запуск @c SignalRouter и оркестратора @c Master.
+ * 7. Вход в блокирующий @c MainLoop.
+ * 8. Детерминированный @c HandleShutdown при выходе.
+ *
+ * @subsection sub_arch_concurrency Потокобезопасность
+ * Управление состоянием основного цикла опирается на
+ * атомарные примитивы и примитивы синхронизации:
+ * - Флаги @c running_ и @c shutdown_requested_ используют
+ *   @c std::atomic<bool> с порядком памяти
+ *   @c memory_order_acquire / @c memory_order_release для
+ *   lock-free проверок состояния из обработчиков сигналов.
+ * - @c MainLoop использует @c std::mutex и
+ *   @c std::condition_variable для блокировки основного
+ *   потока с возможностью периодического выполнения
+ *   @c healthCheck() и мгновенного пробуждения по сигналу.
+ * - Перезагрузка по @c SIGHUP инкапсулирована в
+ *   @c ConfigReloadTransaction (RAII), что гарантирует
+ *   атомарный откат к предыдущему состоянию при любой
+ *   ошибке валидации или инициализации новых компонентов.
+ *
+ * @subsection sub_arch_metrics Интеграция с метриками
+ * Метод @c GetMetricsPayload делегирует сериализацию
+ * @c stc::metrics::ExportToPrometheus. Экспорт захватывает
+ * @c std::shared_lock внутри реестра, что не блокирует
+ * рабочие потоки, обновляющие метрики через lock-free
+ * атомарные операции.
+ *
+ * @warning Текущая реализация использует жестко заданный
+ *          путь к PID-файлу (@c /var/run/xmlfilter.pid).
+ *          Это требует привилегий суперпользователя и
+ *          препятствует запуску нескольких экземпляров
+ *          сервиса на одном хосте или в контейнерах без
+ *          root-прав. Данный аспект является известным
+ *          техническим долгом.
+ *
+ * @dot
+ * digraph ServiceControllerArchitecture {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     ServiceController [label="ServiceController\n(Composition Root)"];
+ *     ArgumentParser [label="ArgumentParser"];
+ *     ConfigService [label="ConfigurationService"];
+ *     SignalRouter [label="SignalRouter"];
+ *     Master [label="Master (Orchestrator)"];
+ *     MetricsRegistry [label="MetricsRegistry"];
+ *     PidFileManager [label="PidFileManager"];
+ *
+ *     ArgumentParser -> ServiceController [label="CLI Args"];
+ *     ConfigService -> ServiceController [label="AppConfig"];
+ *     ServiceController -> SignalRouter [label="Start/Stop"];
+ *     ServiceController -> Master [label="Start/Reload/Stop"];
+ *     ServiceController -> MetricsRegistry [label="Register/Export"];
+ *     ServiceController -> PidFileManager [label="Write/Remove"];
+ * }
+ * @enddot
+ *
+ * @see stc::Master
+ * @see stc::signals::SignalRouter
+ * @see stc::metrics::MetricsRegistry
+ * @see stc::ConfigReloadTransaction
+ *
+ * @since 4.0.0
+ */

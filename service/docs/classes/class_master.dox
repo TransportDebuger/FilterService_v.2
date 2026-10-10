@@ -1,0 +1,77 @@
+/**
+ * @class stc::Master
+ *
+ * @details
+ * Класс выступает в роли оркестратора пула рабочих потоков
+ * (@ref stc::Worker) и управляет их жизненным циклом. Он
+ * инкапсулирует логику создания, остановки, транзакционной
+ * перезагрузки и мониторинга здоровья воркеров.
+ *
+ * @subsection sub_master_stateful Состояние и потокобезопасность
+ *
+ * Жизненный цикл оркестратора описывается конечным автоматом
+ * (@ref stc::Master::State). Переходы между состояниями
+ * защищены атомарными операциями (@c std::atomic).
+ *
+ * Метод @c reload использует @c compare_exchange_strong для
+ * гарантированного перехода из @c RUNNING в @c RELOADING.
+ * Это предотвращает запуск параллельных процедур перезагрузки
+ * при получении множественных сигналов @c SIGHUP.
+ *
+ * @subsection sub_master_reload Транзакционная перезагрузка
+ *
+ * Процедура перезагрузки (@c reload) реализует строгий
+ * порядок замены воркеров для исключения состояний гонки:
+ * 1. Атомарный swap основного контейнера @c workers_ с
+ *    локальным контейнером @c oldWorkers.
+ * 2. Блокирующая остановка старых воркеров
+ *    (@c terminateWorkers), гарантирующая освобождение
+ *    файловых дескрипторов и сетевых соединений.
+ * 3. Создание и запуск новых воркеров (@c spawnWorkers)
+ *    на основе обновленной конфигурации.
+ * 4. Обратный swap новых воркеров в @c workers_.
+ *
+ * Такой подход гарантирует, что в системе никогда не
+ * сосуществуют старые и новые воркеры, обрабатывающие
+ * один и тот же источник, что исключает дублирование
+ * событий и конфликты при перемещении файлов.
+ *
+ * @subsection sub_master_metrics Кэширование метрик
+ *
+ * Для каждого источника (@c SourceConfig) регистрируются
+ * специфичные метрики (@ref stc::SourceMetricsDescriptors).
+ * Чтобы избежать повторной регистрации и сброса счетчиков
+ * при перезагрузке (@c SIGHUP), используется кэш
+ * @c source_metrics_cache_. Дескрипторы создаются лениво
+ * при первом обращении и переиспользуются при последующих
+ * запусках воркеров для того же источника.
+ *
+ * @dot
+ * digraph MasterOrchestration {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Master [label="Master\n(Orchestrator)"];
+ *     WC [label="WorkersContainer"];
+ *     W1 [label="Worker (Source A)"];
+ *     W2 [label="Worker (Source B)"];
+ *     FLM [label="FilterListManager"];
+ *     MR [label="MetricsRegistry"];
+ *
+ *     Master -> WC [label="manages"];
+ *     WC -> W1 [label="contains"];
+ *     WC -> W2 [label="contains"];
+ *     W1 -> FLM [label="uses (shared)"];
+ *     W2 -> FLM [label="uses (shared)"];
+ *     Master -> MR [label="registers metrics"];
+ * }
+ * @enddot
+ *
+ * @see stc::Worker
+ * @see stc::WorkersContainer
+ * @see stc::ServiceController
+ *
+ * @since 4.0.0
+ */
