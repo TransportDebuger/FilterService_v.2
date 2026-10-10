@@ -1,9 +1,9 @@
 /**
-@file master.cpp
-@brief Реализация оркестратора рабочих потоков.
-@version 4.0.0
-@date 2026-07-24
-*/
+ * @file master.cpp
+ * @brief Реализация оркестратора рабочих потоков.
+ * @version 4.0.0
+ * @date 2026-07-24
+ */
 #include "master.hpp"
 
 #include <algorithm>

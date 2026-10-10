@@ -1,10 +1,10 @@
 /**
-@file application_configuration.hpp
-@brief DTO, агрегирующий полностью собранную и провалидированную конфигурацию
-запуска.
-@version 1.0.0
-@date 2026-07-28
-*/
+ * @file application_configuration.hpp
+ * @brief DTO, агрегирующий полностью собранную и провалидированную
+ *        конфигурацию запуска.
+ * @version 1.0.0
+ * @date 2026-07-28
+ */
 #pragma once
 
 #include <string>
@@ -17,8 +17,7 @@ namespace stc {
 
 /**
  * @struct ApplicationConfiguration
- * @brief Инкапсулирует результат работы конвейера конфигурации (Configuration
- * Pipeline).
+ * @brief Инкапсулирует результат работы конвейера конфигурации.
  */
 struct ApplicationConfiguration {
   /// @brief Имя активного окружения (например, "production").
@@ -33,7 +32,10 @@ struct ApplicationConfiguration {
   /// @brief Путь к глобальному CSV-файлу списков фильтрации.
   std::string global_comparison_list;
 
-  /// @brief TCP-порт для HTTP-сервера экспозиции метрик (0 = отключено).
+  /**
+   * @brief TCP-порт для HTTP-сервера экспозиции метрик.
+   * @note Значение 0 означает, что сервер отключен.
+   */
   uint16_t metrics_port{0};
 };
 

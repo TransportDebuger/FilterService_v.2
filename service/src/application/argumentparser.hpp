@@ -13,7 +13,7 @@ namespace stc {
 
 /**
  * @struct CliArguments
- * @brief Строгая структура, агрегирующая результаты парсинга командной строки.
+ * @brief Строгая структура, агрегирующая результаты парсинга CLI.
  */
 struct CliArguments {
   /// @brief Путь к файлу конфигурации.
@@ -31,23 +31,23 @@ struct CliArguments {
 };
 
 /**
-@class ArgumentParser
-@brief Обеспечивает разбор и валидацию аргументов командной строки.
-*/
+ * @class ArgumentParser
+ * @brief Обеспечивает разбор и валидацию аргументов командной строки.
+ */
 class ArgumentParser {
  public:
   /// @brief Конструктор по умолчанию.
   ArgumentParser() = default;
 
-  /// @brief Деструктор.
   ~ArgumentParser() = default;
 
   /**
-   * @brief Выполняет полный цикл обработки аргументов командной строки.
+   * @brief Выполняет полный цикл обработки аргументов CLI.
+   *
    * @param[in] argc Количество аргументов.
    * @param[in] argv Массив строк аргументов.
    * @return CliArguments Структура с результатами парсинга.
-   * @throw std::invalid_argument При некорректных аргументах или их значениях.
+   * @throw std::invalid_argument При некорректных аргументах.
    */
   CliArguments Parse(int argc, char **argv);
 

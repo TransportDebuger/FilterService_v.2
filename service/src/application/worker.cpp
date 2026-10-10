@@ -1,9 +1,9 @@
 /**
-@file worker.cpp
-@brief Реализация рабочего потока обработки файлов.
-@version 3.2.0
-@date 2026-07-24
-*/
+ * @file worker.cpp
+ * @brief Реализация рабочего потока обработки файлов.
+ * @version 3.2.0
+ * @date 2026-07-24
+ */
 #include "worker.hpp"
 
 #include <openssl/evp.h>
@@ -104,8 +104,7 @@ void Worker::stop() {
     if (!running_) return;
     running_ = false;
     paused_ = false;
-  }  // КРИТИЧНО: Освобождаем мьютекс перед join, чтобы Worker::run() мог
-     // завершиться
+  } 
 
   cv_.notify_all();
 

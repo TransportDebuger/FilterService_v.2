@@ -1,9 +1,9 @@
 /**
-@file service_controller.hpp
-@brief Класс управления жизненным циклом сервиса (Composition Root).
-@version 4.0.0
-@date 2026-07-24
-*/
+ * @file service_controller.hpp
+ * @brief Корень композиции и контроллер жизненного цикла сервиса.
+ * @version 4.1.0
+ * @date 2026-07-24
+ */
 #pragma once
 
 #include <atomic>
@@ -29,60 +29,97 @@
 namespace stc {
 
 /**
-@class ServiceController
-@brief Управляет запуском, конфигурацией и жизненным циклом сервиса.
-*/
+ * @class ServiceController
+ * @brief Управляет запуском, конфигурацией и жизненным циклом сервиса.
+ */
 class ServiceController {
  public:
-  /// @brief Основная точка входа сервиса.
+  /**
+   * @brief Основная точка входа сервиса.
+   *
+   * @param[in] argc Количество аргументов командной строки.
+   * @param[in] argv Массив строк аргументов командной строки.
+   * @return int Код завершения процесса (EXIT_SUCCESS или EXIT_FAILURE).
+   */
   int Run(int argc, char** argv);
 
-  /// @brief Формирует текстовый снимок метрик.
+  /**
+   * @brief Формирует текстовый снимок метрик в формате Prometheus.
+   *
+   * @return std::string Текстовый дамп метрик.
+   */
   [[nodiscard]] std::string GetMetricsPayload() const;
 
  private:
-  /// @private Инициализирует SignalRouter и Master.
+  /**
+   * @brief Инициализирует SignalRouter и Master.
+   *
+   * @param[in] config Строгий DTO конфигурации.
+   * @private
+   */
   void Initialize(const ApplicationConfiguration& config);
-  /// @private Регистрирует общие метрики.
+
+  /**
+   * @brief Регистрирует общие метрики в реестре.
+   * @private
+   */
   void RegisterGlobalMetrics();
-  /// @private Главный цикл работы сервиса.
+  
+  /**
+   * @brief Главный цикл работы сервиса.
+   * @private
+   */
   void MainLoop();
-  /// @private Обработчик завершения работы.
+
+  /**
+   * @brief Обработчик завершения работы (Graceful Shutdown).
+   * @private
+   */
   void HandleShutdown();
-  /// @private Обработчик сигнала SIGHUP.
+
+  /**
+   * @brief Обработчик сигнала SIGHUP (транзакционная перезагрузка).
+   * @private
+   */
   void HandleSighup();
-  /// @private Выводит справочную информацию.
+
+  /**
+   * @brief Выводит справочную информацию в stdout.
+   * @private
+   */
   void PrintHelp();
-  /// @private Выводит информацию о версии.
+
+  /**
+   * @brief Выводит информацию о версии в stdout.
+   * @private
+   */
   void PrintVersion();
 
-  /// @private Менеджер PID-файла.
+  /// Менеджер PID-файла.
   std::unique_ptr<PidFileManager> pid_file_mgr_;
-  /// @private Диспетчер логирования.
+  /// Диспетчер логирования.
   std::shared_ptr<stc::logger::ILogger> logger_;
-  /// @private Оркестратор воркеров.
+  /// Оркестратор воркеров.
   std::unique_ptr<Master> master_;
-  /// @private Маршрутизатор сигналов.
+  /// Маршрутизатор сигналов.
   std::unique_ptr<stc::signals::SignalRouter> signal_router_;
-  /// @private Реестр метрик.
+  /// Реестр метрик.
   std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
-  /// @private Менеджер списков фильтрации.
+  /// Менеджер списков фильтрации.
   std::shared_ptr<stc::FilterListManager> filter_list_manager_;
-  /// @private Сервис управления конфигурацией.
+  /// Сервис управления конфигурацией.
   std::unique_ptr<ConfigurationService> config_service_;
-  /// @private HTTP-сервер для экспозиции метрик.
+  /// HTTP-сервер для экспозиции метрик.
   std::unique_ptr<MetricsHttpServer> metrics_server_;
-
-  /// @private Дескрипторы общих метрик.
+  /// Дескрипторы общих метрик.
   GlobalMetricsDescriptors global_metrics_;
-
-  /// @private Флаг состояния основного цикла.
+  /// Флаг состояния основного цикла.
   std::atomic<bool> running_{false};
-  /// @private Мьютекс для синхронизации.
+  /// Мьютекс для синхронизации.
   std::mutex mtx_;
-  /// @private Условная переменная.
+  /// Условная переменная.
   std::condition_variable cv_;
-  /// @private Флаг запроса завершения работы.
+  /// Флаг запроса завершения работы.
   std::atomic<bool> shutdown_requested_{false};
 };
 

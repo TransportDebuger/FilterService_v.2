@@ -1,5 +1,5 @@
 /**
- * @file ifilestorage.hpp
+ * @file Ifilestorage.hpp
  * @brief Абстрактный интерфейс (порт) для работы с файловыми хранилищами.
  * @version 2.2.0
  * @date 2026-07-24
@@ -28,8 +28,9 @@ class IFileStorage {
 
   /**
    * @brief Возвращает список файлов в заданной директории.
+   *
    * @param[in] path Путь к директории.
-   * @return std::vector<std::string> Вектор полных путей к найденным файлам.
+   * @return std::vector<std::string> Вектор полных путей к файлам.
    * @throw std::invalid_argument При некорректном пути.
    * @throw std::runtime_error При ошибках доступа к файловой системе.
    */
@@ -37,6 +38,7 @@ class IFileStorage {
 
   /**
    * @brief Скачивает файл из хранилища на локальный диск.
+   *
    * @param[in] remotePath Путь к файлу в хранилище.
    * @param[in] localPath Локальный путь для сохранения.
    * @throw std::invalid_argument При некорректных путях.
@@ -47,6 +49,7 @@ class IFileStorage {
 
   /**
    * @brief Загружает локальный файл в хранилище.
+   *
    * @param[in] localPath Локальный путь к файлу.
    * @param[in] remotePath Путь для сохранения в хранилище.
    * @throw std::invalid_argument При некорректных путях.
@@ -63,20 +66,19 @@ class IFileStorage {
 
   /**
    * @brief Разрывает соединение с хранилищем.
-   * @throw std::runtime_error При критических ошибках завершения соединения.
+   * @throw std::runtime_error При критических ошибках завершения.
    */
   virtual void disconnect() = 0;
 
   /**
    * @brief Проверяет текущее состояние соединения.
-   * @return true Если соединение активно, иначе false.
+   * @return bool True, если соединение активно, иначе false.
    */
   virtual bool isConnected() const noexcept = 0;
 
   /**
    * @brief Запускает фоновый мониторинг изменений в хранилище.
-   * @throw std::runtime_error Если соединение не установлено или мониторинг уже
-   * запущен.
+   * @throw std::runtime_error Если соединение не установлено.
    */
   virtual void startMonitoring() = 0;
 
@@ -85,7 +87,7 @@ class IFileStorage {
 
   /**
    * @brief Проверяет, активен ли мониторинг.
-   * @return true Если мониторинг активен, иначе false.
+   * @return bool True, если мониторинг активен, иначе false.
    */
   virtual bool isMonitoring() const noexcept = 0;
 
@@ -97,11 +99,11 @@ class IFileStorage {
 
  protected:
   /**
-   * @protected
    * @brief Базовая проверка корректности пути.
-   * @param[in] path Путь к файлу или директории (строка).
-   * @throw std::invalid_argument При пустом пути или наличии последовательности
-   * "..".
+   *
+   * @param[in] path Путь к файлу или директории.
+   * @throw std::invalid_argument При пустом пути или наличии "..".
+   * @protected
    */
   virtual void validatePath(const std::string& path) {
     if (path.empty() || path.find("..") != std::string::npos) {
@@ -109,11 +111,7 @@ class IFileStorage {
     }
   }
 
-  /**
-   * @protected
-   * @brief Коллбэк для уведомления о новых файлах (общее состояние для
-   * наследников).
-   */
+  /// @brief Коллбэк для уведомления о новых файлах.
   FileDetectedCallback onFileDetected_;
 };
 

@@ -1,9 +1,9 @@
 /**
-@file service_controller.cpp
-@brief Реализация методов ServiceController.
-@version 4.0.0
-@date 2026-07-24
-*/
+ * @file service_controller.cpp
+ * @brief Реализация методов ServiceController.
+ * @version 4.1.0
+ * @date 2026-07-24
+ */
 #include "service_controller.hpp"
 
 #include <pthread.h>
@@ -19,6 +19,11 @@ using namespace std::chrono_literals;
 
 namespace stc {
 
+/** 
+ * @brief Путь к PID-файлу по умолчанию.
+ * @todo Сделать путь к PID-файлу настраиваемым через конфигурацию
+ *        или использовать /tmp/ для локального тестирования.
+ */
 constexpr const char* kPidFile = "/var/run/xmlfilter.pid";
 
 int ServiceController::Run(int argc, char** argv) {
