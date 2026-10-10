@@ -1,0 +1,64 @@
+/**
+ * @page page_argument_parser Модуль ArgumentParser
+ *
+ * @section sec_ap_overview Обзор
+ *
+ * Модуль @ref stc::ArgumentParser инкапсулирует синтаксический
+ * разбор аргументов командной строки и трансляцию их в строгий
+ * типобезопасный DTO @ref stc::CliArguments. Является первой
+ * точкой входа в конвейере инициализации
+ * @ref stc::ServiceController.
+ *
+ * @section sec_ap_rationale Архитектурные обоснования
+ *
+ * @subsection sub_ap_dto Использование DTO
+ *
+ * Архитектурное решение возврата структуры
+ * @ref stc::CliArguments вместо прямой модификации полей
+ * контроллера реализует принцип единственной ответственности
+ * (SRP). Парсер не знает о существовании файловой системы,
+ * сетевых портов или подсистемы логирования. Его единственная
+ * задача — синтаксическая валидация входного потока символов
+ * и семантическое сопоставление ключей со значениями.
+ *
+ * @subsection sub_ap_override Механизм переопределений
+ *
+ * Поддержка произвольных переопределений через флаг
+ * `--override key:value` позволяет модифицировать любую
+ * ветвь JSON-конфигурации в runtime без необходимости
+ * расширения списка явных CLI-флагов для каждого параметра.
+ * Синтаксис `key:value` жестко фиксируется для исключения
+ * неоднозначности при парсинге.
+ *
+ * @subsection sub_ap_syntax Поддержка синтаксисов
+ *
+ * Для флагов, требующих значений (`--config-file`,
+ * `--environment`), поддерживаются два синтаксиса:
+ * раздельный (`--key value`) и комбинированный
+ * (`--key=value`). Это обеспечивает стандартную эргономику
+ * CLI и упрощает интеграцию с системами оркестрации.
+ *
+ * @section sec_ap_diagram Диаграмма потока данных
+ *
+ * @dot
+ * digraph ArgumentParserFlow {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     main [label="main()"];
+ *     parser [label="ArgumentParser"];
+ *     dto [label="CliArguments"];
+ *     config [label="ConfigurationService"];
+ *
+ *     main -> parser [label="argc, argv"];
+ *     parser -> dto [label="Parse()"];
+ *     dto -> config [label="BuildConfiguration()"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::ArgumentParser
+ * @see @ref stc::CliArguments
+ * @see @ref stc::ServiceController::Run
+ */

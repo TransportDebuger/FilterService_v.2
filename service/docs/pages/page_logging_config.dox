@@ -1,0 +1,79 @@
+/**
+ * @page page_logging_config Модуль logging_config
+ *
+ * @section sec_lc_overview Обзор
+ *
+ * Модуль предоставляет строгие структуры данных (DTO) для
+ * конфигурации подсистемы логирования:
+ * @ref stc::RotationConfig и @ref stc::LoggerSinkConfig.
+ * Они выступают в роли типобезопасного моста между
+ * JSON-файлом конфигурации и фабрикой логгеров
+ * (@ref stc::logger::LoggerFactory).
+ *
+ * @section sec_lc_rationale Архитектурные обоснования
+ *
+ * @subsection sub_lc_dto Типобезопасность и DI
+ *
+ * Использование DTO устраняет зависимость компонентов от
+ * глобального синглтона (упраздненный
+ * `stc::CompositeLogger`). Экземпляры конфигурации
+ * создаются в корне композиции (`ServiceController`) и
+ * внедряются в фабрику. Это гарантирует, что ошибки
+ * парсинга JSON (например, некорректный уровень лога)
+ * будут обнаружены на этапе инициализации, а не в
+ * процессе работы сервиса.
+ *
+ * @subsection sub_lc_flat Упрощение десериализации
+ *
+ * Структура @ref stc::RotationConfig намеренно сделана
+ * плоской. Она агрегирует параметры всех возможных
+ * стратегий ротации (`Size`, `Time`, `Circular`).
+ * Отказ от полиморфных типов (например,
+ * `std::variant`) позволяет напрямую маппить поля JSON
+ * в поля C++ DTO стандартными библиотеками, избегая
+ * написания сложных кастомных десериализаторов.
+ *
+ * @subsection sub_lc_optional Композиция и валидация
+ *
+ * Поле `rotation` в @ref stc::LoggerSinkConfig
+ * использует тип `std::optional`. Стратегии ротации
+ * применимы исключительно к файловым приемникам
+ * (`sync_file`, `async_file`) и не имеют смысла для
+ * консольного вывода (`console`).
+ *
+ * Сами DTO не содержат логики валидации. Проверка
+ * корректности комбинации полей делегируется методу
+ * создания синка в @ref stc::logger::LoggerFactory.
+ * Это соответствует принципу Fail-Fast: некорректная
+ * конфигурация приводит к генерации исключения на
+ * этапе старта сервиса.
+ *
+ * @section sec_lc_diagram Диаграмма потока данных
+ *
+ * @dot
+ * digraph LoggingConfigFlow {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica",
+ *           fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     JSON [label="JSON Config"];
+ *     SC [label="ServiceController\n(Root)"];
+ *     LSC [label="LoggerSinkConfig"];
+ *     RC [label="RotationConfig"];
+ *     Factory [label="LoggerFactory"];
+ *     Sinks [label="Sinks\n(Console, File)"];
+ *
+ *     JSON -> SC [label="parse"];
+ *     SC -> LSC [label="creates"];
+ *     LSC -> RC [label="contains\n(optional)"];
+ *     SC -> Factory [label="injects"];
+ *     Factory -> Sinks [label="creates"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::RotationConfig
+ * @see @ref stc::LoggerSinkConfig
+ * @see @ref stc::logger::LoggerFactory
+ */

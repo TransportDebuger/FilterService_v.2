@@ -1,0 +1,86 @@
+/**
+ * @page page_service_controller Модуль ServiceController
+ *
+ * @section sec_sc_overview Обзор
+ *
+ * Класс @ref stc::ServiceController выступает в роли корня
+ * композиции (Composition Root) и оркестратора жизненного
+ * цикла приложения XmlFilterService. Он инкапсулирует
+ * создание, связывание зависимостей и управление всеми
+ * инфраструктурными и доменными компонентами.
+ *
+ * Модуль является центральной точкой, через которую
+ * проходят все внешние события (сигналы POSIX, аргументы
+ * CLI) и внутренние состояния (конфигурация, метрики).
+ *
+ * @section sec_sc_rationale Архитектурные обоснования
+ *
+ * @subsection sub_sc_composition Корень композиции
+ *
+ * Использование паттерна Composition Root предотвращает
+ * возникновение антипаттерна Service Locator. Все
+ * зависимости (логирование, метрики, сигналы, PID-файл,
+ * Master) создаются и внедряются в единой точке входа
+ * (@ref stc::ServiceController::Run). Это гарантирует
+ * явность связей и упрощает модульное тестирование
+ * за счет возможности инъекции моков.
+ *
+ * @subsection sub_sc_signals Блокировка сигналов POSIX
+ *
+ * Перед созданием любых ресурсов выполняется блокировка
+ * сигналов @c SIGTERM, @c SIGINT и @c SIGHUP на уровне
+ * потока. Это критическое требование предотвращает потерю
+ * сигналов в период между стартом процесса и созданием
+ * файлового дескриптора @c signalfd внутри
+ * @ref stc::signals::SignalRouter.
+ *
+ * @subsection sub_sc_reload Транзакционная перезагрузка
+ *
+ * Обработка @c SIGHUP реализована через паттерн RAII
+ * (@ref stc::ConfigReloadTransaction). Если на любом
+ * этапе перечитывания конфигурации или перезапуска
+ * воркеров возникает исключение, деструктор транзакции
+ * автоматически выполняет откат (Rollback) к предыдущему
+ * валидному состоянию, защищая сервис от перехода в
+ * неконсистентное состояние.
+ *
+ * @section sec_sc_lifecycle Жизненный цикл
+ *
+ * Метод @c Run реализует строгую линейную последовательность:
+ * 1. Блокировка сигналов и парсинг CLI.
+ * 2. Запись PID-файла (защита от повторного запуска).
+ * 3. Сборка и валидация конфигурации (Configuration Pipeline).
+ * 4. Инициализация логгера и реестра метрик.
+ * 5. Запуск @c SignalRouter и оркестратора @c Master.
+ * 6. Вход в блокирующий @c MainLoop.
+ * 7. Детерминированный @c HandleShutdown при выходе.
+ *
+ * @section sec_sc_diagram Диаграмма взаимодействия
+ *
+ * @dot
+ * digraph ServiceControllerModule {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.6,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     OS [label="ОС (POSIX Signals, CLI)"];
+ *     SC [label="ServiceController\n(Composition Root)"];
+ *     Config [label="ConfigurationService"];
+ *     Router [label="SignalRouter"];
+ *     Master [label="Master\n(Worker Pool)"];
+ *     Metrics [label="MetricsRegistry"];
+ *
+ *     OS -> SC [label="argc/argv, SIGTERM/SIGHUP"];
+ *     SC -> Config [label="BuildConfiguration()"];
+ *     SC -> Router [label="Register/Start"];
+ *     SC -> Master [label="start/reload/stop"];
+ *     SC -> Metrics [label="Register/Export"];
+ *     Router -> SC [label="Async Dispatch"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::ServiceController
+ * @see @ref stc::Master
+ * @see @ref stc::ConfigReloadTransaction
+ */

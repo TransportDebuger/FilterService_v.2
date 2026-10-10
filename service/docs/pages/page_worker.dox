@@ -1,0 +1,92 @@
+/**
+ * @page page_worker Модуль Worker
+ *
+ * @section sec_worker_overview Обзор
+ *
+ * Класс @ref stc::Worker инкапсулирует жизненный цикл мониторинга
+ * и обработки файлов для одного конкретного источника данных.
+ * Он является фундаментальной единицей параллелизма в архитектуре
+ * сервиса, обеспечивая изоляцию бизнес-логики от системного
+ * управления потоками и сетевыми протоколами.
+ *
+ * @section sec_worker_rationale Архитектурные обоснования
+ *
+ * @subsection sub_worker_hybrid Гибридная модель потоков
+ *
+ * Воркер использует гибридную модель выполнения. Фоновый поток
+ * (`worker_thread_`) выполняет метод @ref stc::Worker::run,
+ * который отвечает исключительно за управление состоянием
+ * (пауза, остановка) и периодический сбор статистики.
+ *
+ * Непосредственное обнаружение и обработка файлов инициируются
+ * асинхронно через callback-механизм полиморфного адаптера
+ * (@ref stc::IFileStorage). При возникновении события адаптер
+ * вызывает @ref stc::Worker::processFile. Это разделение
+ * ответственности позволяет адаптироваться к специфике
+ * хранилищ (например, `inotify` для локальных файлов или
+ * `polling` для FTP).
+ *
+ * @subsection sub_worker_deadlock Предотвращение Deadlock
+ *
+ * Критическим архитектурным решением является строгий порядок
+ * освобождения ресурсов при graceful shutdown. В методе
+ * @ref stc::Worker::stop мьютекс `state_mutex_` принудительно
+ * освобождается до вызова `adapter_->stopMonitoring()` и
+ * `worker_thread_.join()`.
+ *
+ * Если бы мьютекс удерживался во время `join()`, возник бы
+ * классический deadlock: фоновый поток `run()` пытался бы
+ * захватить `state_mutex_` для проверки условия выхода из
+ * `cv_.wait_for()`, в то время как основной поток ожидал
+ * бы завершения `join()`.
+ *
+ * @subsection sub_worker_pipeline Конвейер обработки
+ *
+ * Метод @ref stc::Worker::processFile реализует полный
+ * конвейер: вычисление SHA-256 хэша (OpenSSL), вызов
+ * @ref stc::XMLProcessor и атомарное перемещение файла.
+ *
+ * Для обеспечения отказоустойчивости при перемещении файлов
+ * между разными файловыми системами (ошибка `EXDEV`)
+ * используется проверка `fs::equivalent(root_path())`.
+ * При несовпадении устройств применяется двухэтапная
+ * операция: `fs::copy_file` с последующим `fs::remove`.
+ *
+ * @section sec_worker_metrics Метрики и самовосстановление
+ *
+ * Воркер инкапсулирует расчет скользящего среднего времени
+ * обработки с использованием онлайн-алгоритма. Это позволяет
+ * вычислять среднее за константное время O(1) без выделения
+ * памяти для хранения истории замеров.
+ *
+ * Метод @ref stc::Worker::isAlive предоставляет lock-free
+ * запрос статуса активности. Он используется оркестратором
+ * @ref stc::Master в цикле `healthCheck` для автоматического
+ * перезапуска упавших воркеров (паттерн self-healing).
+ *
+ * @section sec_worker_diagram Диаграмма взаимодействия
+ *
+ * @dot
+ * digraph WorkerLifecycle {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Master [label="Master\n(Orchestrator)"];
+ *     Worker [label="Worker\n(Background Thread)"];
+ *     Adapter [label="IFileStorage\n(Event Source)"];
+ *     Proc [label="XMLProcessor"];
+ *     FS [label="File System"];
+ *
+ *     Master -> Worker [label="start() / healthCheck()"];
+ *     Adapter -> Worker [label="callback:\nprocessFile()"];
+ *     Worker -> Proc [label="process()"];
+ *     Worker -> FS [label="move / hash"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::Worker
+ * @see @ref stc::Master
+ * @see @ref stc::IFileStorage
+ */

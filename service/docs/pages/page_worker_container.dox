@@ -1,0 +1,82 @@
+/**
+ * @page page_worker_container Модуль WorkersContainer
+ *
+ * @section sec_wc_overview Обзор
+ *
+ * Класс @ref stc::WorkersContainer инкапсулирует потокобезопасное
+ * управление коллекцией рабочих потоков (@ref stc::Worker).
+ * Он выступает в роли защищенного репозитория, изолирующего
+ * внутреннюю структуру данных от прямых модификаций со стороны
+ * оркестратора @ref stc::Master.
+ *
+ * @section sec_wc_rationale Архитектурные обоснования
+ *
+ * @subsection sub_wc_scoped_lock Паттерн Scoped Lock
+ *
+ * Вместо предоставления публичного мьютекса или методов
+ * модификации коллекции, класс реализует паттерн Scoped Lock
+ * через шаблонный метод `access`. Вызывающий код передает
+ * лямбда-функцию, которая выполняется под защитой
+ * `std::lock_guard`.
+ *
+ * Данный подход гарантирует, что блокировка будет освобождена
+ * даже при возникновении исключения внутри лямбды. Это
+ * предотвращает взаимные блокировки (deadlock) и утечки
+ * ресурсов, а также исключает возможность удержания мьютекса
+ * дольше, чем это необходимо для выполнения атомарной операции.
+ *
+ * @subsection sub_wc_deadlock Предотвращение Deadlock при обмене
+ *
+ * Метод `swap` реализует атомарный обмен содержимым между
+ * двумя контейнерами. Для предотвращения deadlock при
+ * одновременном вызове `swap` из разных потоков используется
+ * `std::lock` с двумя `std::unique_lock`, инициализированными
+ * с флагом `std::defer_lock`.
+ *
+ * Это гарантирует, что мьютексы обоих контейнеров захватываются
+ * в безопасном порядке, исключая циклическую зависимость.
+ * Данный механизм является фундаментом транзакционной
+ * перезагрузки в @ref stc::Master.
+ *
+ * @section sec_wc_lifecycle Роль в транзакционной перезагрузке
+ *
+ * В контексте оркестратора @ref stc::Master контейнер
+ * обеспечивает безопасную замену пула воркеров без остановки
+ * основного процесса. При получении сигнала `SIGHUP`:
+ * 1. Основной контейнер `workers_` атомарно обменивается
+ *    с локальным `oldWorkers` через метод `swap`.
+ * 2. Старые воркеры останавливаются блокирующим вызовом
+ *    `terminateWorkers`.
+ * 3. Создаются новые воркеры и помещаются в основной
+ *    контейнер через обратный `swap`.
+ *
+ * Инкапсуляция мьютекса внутри @ref stc::WorkersContainer
+ * позволяет выполнять эти операции без необходимости
+ * синхронизации на уровне @ref stc::Master, снижая связность.
+ *
+ * @section sec_wc_diagram Диаграмма взаимодействия
+ *
+ * @dot
+ * digraph WorkersContainerInteraction {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Master [label="Master\n(Orchestrator)"];
+ *     WC [label="WorkersContainer\n(Scoped Lock)"];
+ *     Mutex [label="std::mutex"];
+ *     W1 [label="Worker A"];
+ *     W2 [label="Worker B"];
+ *
+ *     Master -> WC [label="access() / swap()"];
+ *     WC -> Mutex [label="locks"];
+ *     WC -> W1 [label="contains"];
+ *     WC -> W2 [label="contains"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::Master
+ * @see @ref stc::Master::reload
+ * @see @ref stc::Worker
+ */

@@ -1,0 +1,99 @@
+/**
+ * @page page_metrics_descriptors Модуль metrics_descriptors
+ *
+ * @section sec_md_overview Обзор
+ *
+ * Модуль предоставляет структуры данных (DTO) для агрегации
+ * дескрипторов метрик: @ref stc::GlobalMetricsDescriptors
+ * и @ref stc::SourceMetricsDescriptors. Они инкапсулируют
+ * ссылки на интерфейсы подсистемы `stc::metrics`, устраняя
+ * проблему Parameter Tunneling при инъекции зависимостей.
+ *
+ * @section sec_md_rationale Архитектурные обоснования
+ *
+ * @subsection sub_md_dto Устранение Parameter Tunneling
+ *
+ * Инкапсуляция 9 глобальных и 12 пер-источниковых
+ * дескрипторов в единые DTO-структуры сохраняет
+ * читаемость сигнатур конструкторов. При создании
+ * @ref stc::Worker оркестратор @ref stc::Master передает
+ * два экземпляра DTO вместо 21 отдельного указателя.
+ * Это упрощает расширение набора телеметрии без
+ * модификации контрактов классов.
+ *
+ * @subsection sub_md_granularity Глобальные и локальные метрики
+ *
+ * Архитектурное решение разделять метрики на два уровня
+ * обусловлено требованиями наблюдаемости. Глобальные
+ * метрики (@ref stc::GlobalMetricsDescriptors) дают
+ * общую картину нагрузки сервиса. Пер-источниковые
+ * метрики (@ref stc::SourceMetricsDescriptors) позволяют
+ * точно локализовать деградацию конкретного источника
+ * (например, медленного FTP-сервера) без влияния на
+ * усредненные показатели.
+ *
+ * Критическим отличием локальных метрик является
+ * детализация ошибок: разделение на
+ * `files_failed_parse` (сбои XML) и
+ * `files_failed_write` (сбои Disk I/O). Это позволяет
+ * операторам различать проблемы качества данных и
+ * проблемы инфраструктуры хранения.
+ *
+ * @subsection sub_md_prometheus Семантика типов Prometheus
+ *
+ * Выбор интерфейсов строго подчиняется модели данных
+ * Prometheus Text Exposition:
+ * - `ICounter` используется для монотонно возрастающих
+ *   значений (файлы, записи, байты).
+ * - `IGauge` применяется для мгновенных состояний
+ *   (активные воркеры, скользящее среднее, бинарный
+ *   статус `worker_state`).
+ * - `IHistogram` служит для сбора распределения
+ *   времени обработки по заданным бакетам.
+ *
+ * @section sec_md_lifecycle Кэширование и монотонность
+ *
+ * Экземпляры @ref stc::SourceMetricsDescriptors
+ * создаются лениво в методе
+ * @ref stc::Master::getOrCreateSourceMetrics и
+ * сохраняются в кэше `source_metrics_cache_`. При
+ * транзакционной перезагрузке по сигналу `SIGHUP`
+ * дескрипторы переиспользуются. Это гарантирует
+ * монотонность счетчиков: повторная регистрация
+ * метрик с теми же именами привела бы к сбросу
+ * значений в ноль или фатальной ошибке скрейпера.
+ *
+ * @section sec_md_diagram Диаграмма потока данных
+ *
+ * @dot
+ * digraph MetricsDescriptorsFlow {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica",
+ *           fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Registry [label="IMetricsRegistry"];
+ *     Master [label="Master\n(Cache)"];
+ *     GMD [label="GlobalMetricsDescriptors"];
+ *     SMD [label="SourceMetricsDescriptors"];
+ *     W1 [label="Worker #1"];
+ *     W2 [label="Worker #2"];
+ *     Prom [label="Prometheus"];
+ *
+ *     Registry -> GMD [label="creates"];
+ *     Registry -> SMD [label="creates"];
+ *     Master -> GMD [label="holds"];
+ *     Master -> SMD [label="caches"];
+ *     GMD -> W1 [label="shared_ptr"];
+ *     SMD -> W1 [label="shared_ptr"];
+ *     SMD -> W2 [label="shared_ptr"];
+ *     W1 -> Prom [label="exposes"];
+ *     W2 -> Prom [label="exposes"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::GlobalMetricsDescriptors
+ * @see @ref stc::SourceMetricsDescriptors
+ * @see @ref stc::Master
+ */

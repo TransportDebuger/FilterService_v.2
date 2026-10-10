@@ -1,0 +1,100 @@
+/**
+ * @page page_master Модуль Master
+ *
+ * @section sec_master_overview Обзор
+ *
+ * Класс @ref stc::Master выступает в роли оркестратора пула
+ * рабочих потоков (@ref stc::Worker) и управляет их
+ * жизненным циклом. Он инкапсулирует логику создания,
+ * остановки, транзакционной перезагрузки и мониторинга
+ * здоровья воркеров, обеспечивая изоляцию бизнес-логики
+ * от системного управления потоками.
+ *
+ * @section sec_master_rationale Архитектурные обоснования
+ *
+ * @subsection sub_master_state_machine Конечный автомат
+ *
+ * Жизненный цикл оркестратора описывается строгим
+ * конечным автоматом (@ref stc::Master::State).
+ * Переходы между состояниями защищены атомарными
+ * операциями. Использование
+ * @c compare_exchange_strong для переходов
+ * @c STOPPED -> @c STARTING и @c RUNNING -> @c RELOADING
+ * гарантирует, что только один поток сможет инициировать
+ * процесс создания или замены воркеров. Это критически
+ * важно для предотвращения состояний гонки при обработке
+ * множественных сигналов @c SIGHUP.
+ *
+ * @subsection sub_master_reload Транзакционная перезагрузка
+ *
+ * Процедура перезагрузки (@c reload) реализует строгий
+ * порядок замены воркеров. Основной контейнер
+ * @c workers_ атомарно обменивается с локальным
+ * @c oldWorkers через @c std::vector::swap.
+ *
+ * Такой подход гарантирует, что в системе никогда не
+ * сосуществуют старые и новые воркеры, обрабатывающие
+ * один и тот же источник. Это исключает конфликты при
+ * перемещении файлов (race conditions) и дублирование
+ * событий в системах мониторинга. Блокирующая остановка
+ * старых потоков выполняется до инстанцирования новых
+ * адаптеров хранилищ.
+ *
+ * @subsection sub_master_metrics Монотонность метрик
+ *
+ * Для каждого источника регистрируются специфичные
+ * метрики (@ref stc::SourceMetricsDescriptors).
+ * Чтобы избежать повторной регистрации и сброса
+ * счетчиков в ноль при перезагрузке по @c SIGHUP,
+ * используется внутренний кэш
+ * @c source_metrics_cache_. Дескрипторы создаются
+ * лениво при первом обращении и переиспользуются
+ * при последующих запусках, что сохраняет монотонность
+ * телеметрии в Prometheus.
+ *
+ * @section sec_master_lifecycle Жизненный цикл
+ *
+ * Управление потоками подчиняется строгой
+ * последовательности:
+ * 1. @c start: Атомарный переход в @c STARTING,
+ *    инстанцирование воркеров, переход в @c RUNNING.
+ * 2. @c reload: Переход в @c RELOADING, swap
+ *    контейнеров, блокирующее ожидание старых
+ *    потоков, запуск новых, возврат в @c RUNNING.
+ * 3. @c healthCheck: Периодическая проверка
+ *    @c isAlive() и автоматический перезапуск
+ *    упавших воркеров (self-healing).
+ * 4. @c stop: Принудительный атомарный переход в
+ *    @c STOPPED и блокирующее присоединение потоков.
+ *
+ * @section sec_master_diagram Диаграмма взаимодействия
+ *
+ * @dot
+ * digraph MasterOrchestration {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica",
+ *           fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Master [label="Master\n(Orchestrator)"];
+ *     WC [label="WorkersContainer"];
+ *     W1 [label="Worker (Source A)"];
+ *     W2 [label="Worker (Source B)"];
+ *     FLM [label="FilterListManager"];
+ *     MR [label="MetricsRegistry"];
+ *
+ *     Master -> WC [label="manages"];
+ *     WC -> W1 [label="contains"];
+ *     WC -> W2 [label="contains"];
+ *     W1 -> FLM [label="uses (shared)"];
+ *     W2 -> FLM [label="uses (shared)"];
+ *     Master -> MR [label="registers metrics"];
+ * }
+ * @enddot
+ *
+ * @see @ref stc::Master
+ * @see @ref stc::Worker
+ * @see @ref stc::WorkersContainer
+ * @see @ref stc::ServiceController
+ */
