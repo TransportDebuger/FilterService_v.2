@@ -53,50 +53,87 @@ void PollingMonitor::Stop() {
 }
 
 void PollingMonitor::Run(std::stop_token stoken) {
-  while (!stoken.stop_requested()) {
-    auto deadline = std::chrono::steady_clock::now() + polling_interval_;
-    while (std::chrono::steady_clock::now() < deadline &&
-           !stoken.stop_requested()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (stoken.stop_requested()) break;
-
-    if (!std::filesystem::exists(path_)) {
-      throw std::runtime_error("PollingMonitor: Path disappeared: " + path_);
-    }
-
-    try {
-      std::unordered_map<std::string, std::filesystem::file_time_type>
-          current_files;
-      for (const auto& entry : std::filesystem::directory_iterator(path_)) {
-        if (entry.is_regular_file()) {
-          current_files[entry.path().string()] = entry.last_write_time();
+    while (!stoken.stop_requested()) {
+        auto deadline = std::chrono::steady_clock::now() + polling_interval_;
+        while (std::chrono::steady_clock::now() < deadline && !stoken.stop_requested()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-      }
+        if (stoken.stop_requested()) break;
 
-      for (const auto& [file, time] : current_files) {
-        auto it = known_files_.find(file);
-        if (it == known_files_.end()) {
-          callback_(Event::Created, file);
-        } else if (it->second != time) {
-          callback_(Event::Modified, file);
+        if (!std::filesystem::exists(path_)) {
+            throw std::runtime_error("PollingMonitor: Path disappeared: " + path_);
         }
-      }
 
-      for (const auto& [file, time] : known_files_) {
-        if (current_files.find(file) == current_files.end()) {
-          callback_(Event::Deleted, file);
+        try {
+            // 1. Формируем текущий снимок директории
+            std::unordered_map<std::string, FileState> current_files;
+            for (const auto& entry : std::filesystem::directory_iterator(path_)) {
+                if (entry.is_regular_file()) {
+                    try {
+                        current_files[entry.path().string()] = {
+                            entry.file_size(),
+                            entry.last_write_time()
+                        };
+                    } catch (const std::filesystem::filesystem_error&) {
+                        // Файл мог быть удален между итерациями iterator
+                        continue;
+                    }
+                }
+            }
+
+            // 2. Обработка известных (уже стабилизированных) файлов
+            for (auto it = known_files_.begin(); it != known_files_.end(); ) {
+                auto curr_it = current_files.find(it->first);
+                if (curr_it == current_files.end()) {
+                    callback_(Event::Deleted, it->first);
+                    it = known_files_.erase(it);
+                } else {
+                    if (curr_it->second.mtime != it->second) {
+                        callback_(Event::Modified, it->first);
+                        it->second = curr_it->second.mtime; // Обновляем mtime
+                    }
+                    ++it;
+                }
+            }
+
+            // 3. Обработка новых и ожидающих (pending) файлов
+            for (const auto& [file, state] : current_files) {
+                if (known_files_.find(file) != known_files_.end()) {
+                    continue; // Файл уже стабилен и обработан
+                }
+
+                auto pending_it = pending_files_.find(file);
+                if (pending_it == pending_files_.end()) {
+                    // Первый раз видим файл — добавляем в pending
+                    pending_files_[file] = state;
+                } else {
+                    // Второй раз видим файл — сравниваем состояние
+                    if (pending_it->second.size == state.size && 
+                        pending_it->second.mtime == state.mtime) {
+                        // Состояние не изменилось за интервал polling_interval — файл готов
+                        callback_(Event::Created, file);
+                        known_files_[file] = state.mtime;
+                        pending_files_.erase(pending_it);
+                    } else {
+                        // Файл все еще пишется — обновляем pending-состояние
+                        pending_it->second = state;
+                    }
+                }
+            }
+
+            // 4. Очистка pending-файлов, которые исчезли из директории
+            for (auto it = pending_files_.begin(); it != pending_files_.end(); ) {
+                if (current_files.find(it->first) == current_files.end()) {
+                    it = pending_files_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+        } catch (const std::filesystem::filesystem_error& e) {
+            throw std::runtime_error("PollingMonitor filesystem error: " + std::string(e.what()));
         }
-      }
-
-      known_files_ = std::move(current_files);
-
-    } catch (const std::filesystem::filesystem_error& e) {
-      throw std::runtime_error("PollingMonitor filesystem error: " +
-                               std::string(e.what()));
     }
-  }
 }
 
 std::exception_ptr PollingMonitor::GetException() const noexcept {

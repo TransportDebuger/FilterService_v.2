@@ -59,8 +59,8 @@ class NoOpMetricsRegistry final : public IMetricsRegistry {
         noop_gauge_(std::make_shared<NoOpGauge>()),
         noop_histogram_(std::make_shared<NoOpHistogram>()) {}
 
-  std::shared_ptr<ICounter> RegisterCounter(std::string_view /*name*/,
-                                            std::string_view /*help*/) override {
+  std::shared_ptr<ICounter> RegisterCounter(
+      std::string_view /*name*/, std::string_view /*help*/) override {
     return noop_counter_;
   }
 

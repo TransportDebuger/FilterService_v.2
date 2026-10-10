@@ -60,7 +60,8 @@ void XmlFormatter::AppendEscapedString(std::string& output,
   std::size_t start = 0;
   for (std::size_t i = 0; i < str.size(); ++i) {
     const char c = str[i];
-    // XML требует экранирования: & < > " ' и управляющих символов (кроме \\t \\n
+    // XML требует экранирования: & < > " ' и управляющих символов (кроме \\t
+    // \\n
     // \\r)
     bool needs_escape =
         (c == '&' || c == '<' || c == '>' || c == '"' || c == '\'');

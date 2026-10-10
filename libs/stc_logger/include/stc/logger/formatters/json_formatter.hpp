@@ -40,7 +40,8 @@ class JsonFormatter final : public ILogFormatter {
   /**
    * @private
    * @brief Дозаписывает экранированную строку в целевой буфер.
-   * @param output Целевой буфер, в который будет выполнена дозапись (In-place Appending).
+   * @param output Целевой буфер, в который будет выполнена дозапись (In-place
+   * Appending).
    * @param str Исходная строка для экранирования согласно стандарту RFC 8259.
    */
   static void AppendEscapedString(std::string& output, std::string_view str);
@@ -49,7 +50,8 @@ class JsonFormatter final : public ILogFormatter {
    * @private
    * @brief Дозаписывает временную метку в формате ISO 8601 в целевой буфер.
    * @param output Целевой буфер, в который будет выполнена дозапись.
-   * @param tp Системное время для форматирования (UTC, с миллисекундной точностью).
+   * @param tp Системное время для форматирования (UTC, с миллисекундной
+   * точностью).
    */
   static void AppendTimeIso8601(std::string& output,
                                 std::chrono::system_clock::time_point tp);

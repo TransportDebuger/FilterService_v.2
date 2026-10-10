@@ -63,9 +63,9 @@ class Logger final : public ILogger {
    * @param message Текстовое содержимое сообщения.
    * @param location Контекст вызова (файл, функция, строка).
    */
-  void Log(
-      LogLevel level, std::string_view message,
-      std::source_location location = std::source_location::current()) noexcept override;
+  void Log(LogLevel level, std::string_view message,
+           std::source_location location =
+               std::source_location::current()) noexcept override;
 
   /**
    * @brief Регистрация сообщения уровня Trace.

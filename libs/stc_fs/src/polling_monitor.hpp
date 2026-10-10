@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -87,6 +88,16 @@ class PollingMonitor : public IDirectoryMonitor {
   /// последней модификации файлов. Используется для вычисления дельты событий
   /// (Created, Modified, Deleted) между итерациями опроса.
   std::unordered_map<std::string, std::filesystem::file_time_type> known_files_;
+
+  /// @private Структура для хранения состояния файла в процессе проверки стабильности.
+  struct FileState {
+    std::uintmax_t size;
+    std::filesystem::file_time_type mtime;
+  };
+
+  /// @private Карта файлов, ожидающих подтверждения стабильности (два
+  /// последовательных снимка).
+  std::unordered_map<std::string, FileState> pending_files_;
 
   /// @private Мьютекс для обеспечения потокобезопасного доступа (чтения и
   /// записи) к указателю на исключение из разных потоков.

@@ -39,7 +39,8 @@ class XmlFormatter final : public ILogFormatter {
   /**
    * @private
    * @brief Добавляет экранированную строку в целевой буфер.
-   * @param output Целевой буфер, в который будет выполнена дозапись (In-place Appending).
+   * @param output Целевой буфер, в который будет выполнена дозапись (In-place
+   * Appending).
    * @param str Исходная строка для экранирования согласно спецификации XML 1.0.
    */
   static void AppendEscapedString(std::string& output, std::string_view str);
@@ -48,7 +49,8 @@ class XmlFormatter final : public ILogFormatter {
    * @private
    * @brief Добавляет временную метку в формате ISO 8601 в целевой буфер.
    * @param output Целевой буфер, в который будет выполнена дозапись.
-   * @param tp Системное время для форматирования (UTC, с миллисекундной точностью).
+   * @param tp Системное время для форматирования (UTC, с миллисекундной
+   * точностью).
    */
   static void AppendTimeIso8601(std::string& output,
                                 std::chrono::system_clock::time_point tp);

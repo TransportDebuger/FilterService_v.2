@@ -8,7 +8,8 @@ namespace fs = std::filesystem;
 
 namespace {
 // Вспомогательная функция для маршрутизации ошибок: в callback или в std::cerr
-void ReportError(const std::function<void(const std::error_code&, std::string_view)>& callback,
+void ReportError(const std::function<void(const std::error_code&,
+                                          std::string_view)>& callback,
                  const std::error_code& ec, std::string_view context) {
   if (callback) {
     callback(ec, context);
@@ -102,11 +103,12 @@ void FileSink::OpenFile() {
 
   std::error_code ec;
   auto size = fs::file_size(file_path_, ec);
-  if (ec) { // LCOV_EXCL_LINE     
-    ReportError(error_callback_, ec, "Failed to get file size: " + file_path_);  // LCOV_EXCL_LINE
-    current_size_ = 0;  // LCOV_EXCL_LINE
-  } else {  // LCOV_EXCL_LINE
-    current_size_ = size;  // LCOV_EXCL_LINE
+  if (ec) {  // LCOV_EXCL_LINE
+    ReportError(error_callback_, ec,
+                "Failed to get file size: " + file_path_);  // LCOV_EXCL_LINE
+    current_size_ = 0;                                      // LCOV_EXCL_LINE
+  } else {                                                  // LCOV_EXCL_LINE
+    current_size_ = size;                                   // LCOV_EXCL_LINE
   }
 }
 

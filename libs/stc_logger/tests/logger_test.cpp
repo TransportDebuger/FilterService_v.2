@@ -279,7 +279,7 @@ TEST_F(LoggerTest, Log_ExceptionInFormatter_IsolatedAndDoesNotThrow) {
   // Критическая проверка: вызов не должен выбрасывать исключение наружу
   // благодаря noexcept и внутреннему try-catch
   EXPECT_NO_THROW(logger_->Info("Message that causes formatter crash"));
-  
+
   // Write не должен быть вызван, так как Format упал
   EXPECT_CALL(*bad_sink, Write(_, _)).Times(0);
 }
@@ -291,8 +291,7 @@ TEST_F(LoggerTest, Log_ExceptionInFormatter_IsolatedAndDoesNotThrow) {
 TEST_F(LoggerTest, Log_SinkThrowsNonStdException_IsolatedAndDoesNotThrow) {
   auto bad_formatter = std::make_shared<StrictMock<MockLogFormatter>>();
   // Намеренно бросаем int, который не наследуется от std::exception
-  EXPECT_CALL(*bad_formatter, Format(_))
-      .WillOnce(testing::Throw(42)); 
+  EXPECT_CALL(*bad_formatter, Format(_)).WillOnce(testing::Throw(42));
 
   auto bad_sink = std::make_shared<NiceMock<MockLogSink>>();
   ON_CALL(*bad_sink, GetFormatter()).WillByDefault(Return(bad_formatter));
@@ -306,22 +305,26 @@ TEST_F(LoggerTest, Log_SinkThrowsNonStdException_IsolatedAndDoesNotThrow) {
 TEST_F(LoggerTest, Log_GlobalFilterThrowsStdException_IsolatedAndDoesNotThrow) {
   auto bad_global_filter = std::make_shared<StrictMock<MockLogFilter>>();
   EXPECT_CALL(*bad_global_filter, ShouldPass(_))
-      .WillOnce(testing::Throw(std::runtime_error("Global filter std::exception")));
-  
+      .WillOnce(
+          testing::Throw(std::runtime_error("Global filter std::exception")));
+
   logger_->AddGlobalFilter(bad_global_filter);
 
-  EXPECT_NO_THROW(logger_->Info("Message causing std::exception in global routing"));
+  EXPECT_NO_THROW(
+      logger_->Info("Message causing std::exception in global routing"));
 }
 
-TEST_F(LoggerTest, Log_GlobalFilterThrowsNonStdException_IsolatedAndDoesNotThrow) {
+TEST_F(LoggerTest,
+       Log_GlobalFilterThrowsNonStdException_IsolatedAndDoesNotThrow) {
   auto bad_global_filter = std::make_shared<StrictMock<MockLogFilter>>();
   // Намеренно бросаем std::string, который не наследуется от std::exception
   EXPECT_CALL(*bad_global_filter, ShouldPass(_))
       .WillOnce(testing::Throw(std::string("Global filter non-std exception")));
-  
+
   logger_->AddGlobalFilter(bad_global_filter);
 
-  EXPECT_NO_THROW(logger_->Info("Message causing non-std exception in global routing"));
+  EXPECT_NO_THROW(
+      logger_->Info("Message causing non-std exception in global routing"));
 }
 
 }  // namespace stc::logger::test

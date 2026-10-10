@@ -40,7 +40,8 @@ void InotifyMonitor::Start() {
   }
 
   uint32_t mask =
-      IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO;
+      IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE | IN_MOVED_FROM | IN_MODIFY;
+
   watch_descriptor_ = sys_calls_->AddWatch(inotify_fd_, path_, mask);
   if (watch_descriptor_ < 0) {
     sys_calls_->Close(inotify_fd_);
@@ -103,7 +104,7 @@ void InotifyMonitor::Run(std::stop_token stoken) {
         std::string full_path =
             (std::filesystem::path(path_) / event->name).string();
 
-        if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+        if (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
           callback_(Event::Created, full_path);
         }
         if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {

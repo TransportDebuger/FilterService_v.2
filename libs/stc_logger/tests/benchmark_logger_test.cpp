@@ -29,8 +29,7 @@ BENCHMARK_DEFINE_F(LoggerFixture, AsyncSink_Unlimited)
   auto formatter = std::make_shared<TextFormatter>("%msg\n");
   auto sink = std::make_shared<AsyncFileSink>(
       log_file_.string(), formatter, nullptr, nullptr, 64 * 1024,
-      std::chrono::milliseconds(100), 0,
-      OverflowPolicy::kDrop);
+      std::chrono::milliseconds(100), 0, OverflowPolicy::kDrop);
 
   Logger logger("Bench");
   logger.AddSink(sink);

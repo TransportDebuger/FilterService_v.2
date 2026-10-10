@@ -9,25 +9,29 @@
 namespace fs = std::filesystem;
 
 namespace {
-void ReportError(const std::function<void(const std::error_code&, std::string_view)>& callback,
+void ReportError(const std::function<void(const std::error_code&,
+                                          std::string_view)>& callback,
                  const std::error_code& ec, std::string_view context) {
   if (callback) {
     callback(ec, context);
   } else {
-    std::cerr << "[AsyncFileSink ERROR] " << context << ": " << ec.message() << "\n";
+    std::cerr << "[AsyncFileSink ERROR] " << context << ": " << ec.message()
+              << "\n";
   }
 }
 }  // namespace
 
 namespace stc::logger {
 
-AsyncFileSink::AsyncFileSink(
-    std::string file_path, std::shared_ptr<ILogFormatter> formatter,
-    std::shared_ptr<ILogFilter> filter,
-    std::shared_ptr<IRotationPolicy> rotation_policy,
-    std::size_t max_batch_size, std::chrono::milliseconds flush_interval,
-    std::size_t max_queue_size, OverflowPolicy overflow_policy,
-    ErrorCallback error_callback)
+AsyncFileSink::AsyncFileSink(std::string file_path,
+                             std::shared_ptr<ILogFormatter> formatter,
+                             std::shared_ptr<ILogFilter> filter,
+                             std::shared_ptr<IRotationPolicy> rotation_policy,
+                             std::size_t max_batch_size,
+                             std::chrono::milliseconds flush_interval,
+                             std::size_t max_queue_size,
+                             OverflowPolicy overflow_policy,
+                             ErrorCallback error_callback)
     : file_path_(std::move(file_path)),
       formatter_(std::move(formatter)),
       filter_(std::move(filter)),
@@ -42,7 +46,8 @@ AsyncFileSink::AsyncFileSink(
   }
 
   OpenFile();
-  worker_thread_ = std::jthread([this](std::stop_token stoken) { WorkerLoop(stoken); });
+  worker_thread_ =
+      std::jthread([this](std::stop_token stoken) { WorkerLoop(stoken); });
 }
 
 AsyncFileSink::~AsyncFileSink() {
@@ -142,10 +147,10 @@ void AsyncFileSink::WorkerLoop(std::stop_token stoken) {
     }
 
     if (!batch_buffer.empty()) {
-      if (!file_stream_.is_open() || !file_stream_.good()) { // LCOV_EXCL_LINE
-        file_stream_.clear();                                // LCOV_EXCL_LINE
-        if (file_stream_.is_open()) file_stream_.close();    // LCOV_EXCL_LINE
-        OpenFile();                                          // LCOV_EXCL_LINE
+      if (!file_stream_.is_open() || !file_stream_.good()) {  // LCOV_EXCL_LINE
+        file_stream_.clear();                                 // LCOV_EXCL_LINE
+        if (file_stream_.is_open()) file_stream_.close();     // LCOV_EXCL_LINE
+        OpenFile();                                           // LCOV_EXCL_LINE
       }
       if (file_stream_.is_open()) {
         RotateIfNeeded(now);
@@ -181,20 +186,21 @@ void AsyncFileSink::OpenFile() {
   auto size = fs::file_size(file_path_, ec);
 
   if (ec) {  // LCOV_EXCL_LINE
-    ReportError(error_callback_, ec, "Failed to get file size: " + file_path_);  // LCOV_EXCL_LINE
-    current_size_ = 0;  // LCOV_EXCL_LINE
-  } else {  // LCOV_EXCL_LINE
-    current_size_ = size;  // LCOV_EXCL_LINE
-  }  // LCOV_EXCL_LINE
+    ReportError(error_callback_, ec,
+                "Failed to get file size: " + file_path_);  // LCOV_EXCL_LINE
+    current_size_ = 0;                                      // LCOV_EXCL_LINE
+  } else {                                                  // LCOV_EXCL_LINE
+    current_size_ = size;                                   // LCOV_EXCL_LINE
+  }                                                         // LCOV_EXCL_LINE
 }
 
 void AsyncFileSink::RotateIfNeeded(std::chrono::system_clock::time_point now) {
   if (!rotation_policy_) return;
   if (!rotation_policy_->ShouldRotate(current_size_, now)) return;
-  
+
   file_stream_.flush();
   file_stream_.close();
-  
+
   std::string rotated_path;
   if (rotation_policy_->RequiresArchiving()) {
     rotated_path = rotation_policy_->GenerateRotatedFileName(file_path_, now);

@@ -12,13 +12,13 @@
 #include <condition_variable>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <stop_token>
 #include <string>
 #include <thread>
-#include <functional>
 
 #include "stc/logger/core/ilog_filter.hpp"
 #include "stc/logger/core/ilog_formatter.hpp"
@@ -33,7 +33,8 @@ namespace stc::logger {
 @param context Контекст возникновения ошибки (например, "OpenFile").
 @since 3.1.0
 */
-using ErrorCallback = std::function<void(const std::error_code& ec, std::string_view context)>;
+using ErrorCallback =
+    std::function<void(const std::error_code& ec, std::string_view context)>;
 
 /**
 @enum OverflowPolicy
@@ -53,19 +54,23 @@ enum class OverflowPolicy {
 */
 class AsyncFileSink final : public ILogSink {
  public:
-   /**
-  @brief Конструктор асинхронного приемника.
-  @param file_path Путь к лог-файлу.
-  @param formatter Форматтер (используется диспетчером, здесь хранится для контракта).
-  @param filter Опциональный локальный фильтр.
-  @param rotation_policy Опциональная стратегия ротации.
-  @param max_batch_size Максимальный размер пакета (в байтах) перед записью на диск.
-  @param flush_interval Максимальное время ожидания перед записью неполного пакета.
-  @param max_queue_size Максимальный размер очереди. 0 означает отсутствие ограничений.
-  @param overflow_policy Поведение при достижении max_queue_size.
-  @param error_callback Опциональный callback для уведомлений об ошибках I/O.
-  @throw std::invalid_argument Если formatter равен nullptr.
-  */
+  /**
+ @brief Конструктор асинхронного приемника.
+ @param file_path Путь к лог-файлу.
+ @param formatter Форматтер (используется диспетчером, здесь хранится для
+ контракта).
+ @param filter Опциональный локальный фильтр.
+ @param rotation_policy Опциональная стратегия ротации.
+ @param max_batch_size Максимальный размер пакета (в байтах) перед записью на
+ диск.
+ @param flush_interval Максимальное время ожидания перед записью неполного
+ пакета.
+ @param max_queue_size Максимальный размер очереди. 0 означает отсутствие
+ ограничений.
+ @param overflow_policy Поведение при достижении max_queue_size.
+ @param error_callback Опциональный callback для уведомлений об ошибках I/O.
+ @throw std::invalid_argument Если formatter равен nullptr.
+ */
   explicit AsyncFileSink(
       std::string file_path, std::shared_ptr<ILogFormatter> formatter,
       std::shared_ptr<ILogFilter> filter = nullptr,

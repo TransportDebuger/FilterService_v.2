@@ -5,8 +5,8 @@
 #include "stc/metrics/metrics_registry.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 #include <cmath>
+#include <stdexcept>
 
 namespace stc::metrics {
 
@@ -38,8 +38,8 @@ AtomicHistogram::AtomicHistogram(std::vector<double> boundaries)
 
 void AtomicHistogram::Observe(double value) {
   if (!std::isfinite(value)) {
-        return; // Тихое отбрасывание NaN/Inf для сохранения lock-free контракта
-    }
+    return;  // Тихое отбрасывание NaN/Inf для сохранения lock-free контракта
+  }
   // Бинарный поиск для нахождения первого бакета, граница которого >= value.
   // Если value больше всех границ, it укажет на end(), что соответствует
   // последнему бакету (+Inf).

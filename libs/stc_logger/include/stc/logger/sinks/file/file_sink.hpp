@@ -10,10 +10,10 @@
 
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <functional>
 
 #include "stc/logger/core/ilog_filter.hpp"
 #include "stc/logger/core/ilog_formatter.hpp"
@@ -28,7 +28,8 @@ namespace stc::logger {
 @param context Контекст возникновения ошибки (например, "OpenFile").
 @since 3.1.0
 */
-using ErrorCallback = std::function<void(const std::error_code& ec, std::string_view context)>;
+using ErrorCallback =
+    std::function<void(const std::error_code& ec, std::string_view context)>;
 
 /**
  * @class FileSink
@@ -42,7 +43,8 @@ class FileSink final : public ILogSink {
   @param file_path Путь к лог-файлу.
   @param formatter Форматтер для сериализации LogRecord (не может быть nullptr).
   @param filter Опциональный локальный фильтр для этого приемника.
-  @param rotation_policy Опциональная стратегия ротации. Если nullptr, ротация не выполняется.
+  @param rotation_policy Опциональная стратегия ротации. Если nullptr, ротация
+  не выполняется.
   @param error_callback Опциональный callback для уведомлений об ошибках I/O.
   @throw std::invalid_argument Если formatter равен nullptr.
   */
@@ -111,7 +113,7 @@ class FileSink final : public ILogSink {
   /// @private
   std::shared_ptr<IRotationPolicy>
       rotation_policy_;  ///< Стратегия ротации (может быть nullptr).
-  
+
   /// @private
   ErrorCallback error_callback_;
 

@@ -30,9 +30,9 @@ class ILogger {
    * @param message Текстовое содержимое сообщения.
    * @param location Контекст вызова (захватывается автоматически).
    */
-  virtual void Log(
-      LogLevel level, std::string_view message,
-      std::source_location location = std::source_location::current()) noexcept = 0;
+  virtual void Log(LogLevel level, std::string_view message,
+                   std::source_location location =
+                       std::source_location::current()) noexcept = 0;
 
   /// @brief Регистрация сообщения уровня Trace.
   virtual void Trace(

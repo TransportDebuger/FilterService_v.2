@@ -1,7 +1,7 @@
 /**
  * @file logger.cpp
  * @brief Реализация класса Logger
- * 
+ *
  * @author Artem Ulyanov
  * @version 3.1.0
  * @author Artem Ulyanov (aka s21::provemet)
@@ -76,15 +76,18 @@ void Logger::Log(LogLevel level, std::string_view message,
         // 4.3. Физическая запись
         sink->Write(record, formatted_msg);
       } catch (const std::exception& e) {
-        std::cerr << "[Logger ERROR] Sink processing failed: " << e.what() << "\n";
+        std::cerr << "[Logger ERROR] Sink processing failed: " << e.what()
+                  << "\n";
       } catch (...) {
-        std::cerr << "[Logger ERROR] Sink processing failed with unknown exception\n";
+        std::cerr
+            << "[Logger ERROR] Sink processing failed with unknown exception\n";
       }
     }
   } catch (const std::exception& e) {
     std::cerr << "[Logger ERROR] Global routing failed: " << e.what() << "\n";
   } catch (...) {
-    std::cerr << "[Logger ERROR] Global routing failed with unknown exception\n";
+    std::cerr
+        << "[Logger ERROR] Global routing failed with unknown exception\n";
   }
 }
 

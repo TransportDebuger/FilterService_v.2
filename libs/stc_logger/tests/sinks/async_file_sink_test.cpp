@@ -311,11 +311,12 @@ TEST_F(AsyncFileSinkTest, PolymorphicDeletion_CoversDeletingDestructor) {
 
 TEST_F(AsyncFileSinkTest, ErrorCallback_InvokedOnOpenFailure) {
   auto formatter = std::make_shared<NiceMock<MockFormatter>>();
-  fs::path invalid_path = fs::temp_directory_path() / "non_existent_dir_abc" / "test.log";
-  
+  fs::path invalid_path =
+      fs::temp_directory_path() / "non_existent_dir_abc" / "test.log";
+
   bool callback_invoked = false;
   std::string captured_context;
-  
+
   auto callback = [&](const std::error_code& /*ec*/, std::string_view context) {
     callback_invoked = true;
     captured_context = std::string(context);
@@ -323,13 +324,13 @@ TEST_F(AsyncFileSinkTest, ErrorCallback_InvokedOnOpenFailure) {
 
   // Передаем callback в качестве последнего аргумента
   EXPECT_NO_THROW({
-    AsyncFileSink sink(
-        invalid_path.string(), formatter, nullptr, nullptr,
-        64 * 1024, std::chrono::milliseconds(100), 
-        0, OverflowPolicy::kDrop, callback);
+    AsyncFileSink sink(invalid_path.string(), formatter, nullptr, nullptr,
+                       64 * 1024, std::chrono::milliseconds(100), 0,
+                       OverflowPolicy::kDrop, callback);
   });
 
-  EXPECT_TRUE(callback_invoked) << "Callback must be invoked on file open failure";
+  EXPECT_TRUE(callback_invoked)
+      << "Callback must be invoked on file open failure";
   EXPECT_NE(captured_context.find("Failed to open file"), std::string::npos);
 }
 
@@ -340,98 +341,109 @@ TEST_F(AsyncFileSinkTest, ErrorCallback_InvokedOnOpenFailure) {
 // Покрывает: OverflowPolicy::kDrop, GetDroppedRecordsCount()
 TEST_F(AsyncFileSinkTest, OverflowPolicy_KDrop_DropsAndCounts) {
   auto formatter = std::make_shared<NiceMock<MockFormatter>>();
-  // ИСПРАВЛЕНО: NiceMock вместо StrictMock, чтобы фоновый поток мог 
+  // ИСПРАВЛЕНО: NiceMock вместо StrictMock, чтобы фоновый поток мог
   // свободно опрашивать ShouldRotate без падения теста.
   auto policy = std::make_shared<NiceMock<MockRotationPolicy>>();
-  
-  // Искусственно "замораживаем" фоновый поток внутри RotateIfNeeded -> ShouldRotate.
-  ON_CALL(*policy, ShouldRotate(_, _)).WillByDefault(testing::Invoke(
-      [](std::uint64_t, std::chrono::system_clock::time_point) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        return false;
-      }));
+
+  // Искусственно "замораживаем" фоновый поток внутри RotateIfNeeded ->
+  // ShouldRotate.
+  ON_CALL(*policy, ShouldRotate(_, _))
+      .WillByDefault(testing::Invoke(
+          [](std::uint64_t, std::chrono::system_clock::time_point) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            return false;
+          }));
   ON_CALL(*policy, RequiresArchiving()).WillByDefault(Return(false));
 
   AsyncFileSink sink(log_file_.string(), formatter, nullptr, policy,
-                     1024 * 1024, std::chrono::milliseconds(5000),
-                     2, OverflowPolicy::kDrop);
+                     1024 * 1024, std::chrono::milliseconds(5000), 2,
+                     OverflowPolicy::kDrop);
 
   sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG1\n");
-  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Ждем, пока поток "уснет" в ShouldRotate
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      100));  // Ждем, пока поток "уснет" в ShouldRotate
 
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n"); // Очередь: 1
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG3\n"); // Очередь: 2 (полна)
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n");  // Очередь: 1
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"),
+             "MSG3\n");  // Очередь: 2 (полна)
 
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG4\n"); // Drop
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG5\n"); // Drop
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG4\n");  // Drop
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG5\n");  // Drop
 
-  EXPECT_EQ(sink.GetDroppedRecordsCount(), 2) 
+  EXPECT_EQ(sink.GetDroppedRecordsCount(), 2)
       << "Should have dropped exactly 2 records";
 }
 
 // Покрывает: OverflowPolicy::kFailFast
 TEST_F(AsyncFileSinkTest, OverflowPolicy_KFailFast_Throws) {
   auto formatter = std::make_shared<NiceMock<MockFormatter>>();
-  auto policy = std::make_shared<NiceMock<MockRotationPolicy>>(); // ИСПРАВЛЕНО
-  
-  ON_CALL(*policy, ShouldRotate(_, _)).WillByDefault(testing::Invoke(
-      [](std::uint64_t, std::chrono::system_clock::time_point) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        return false;
-      }));
+  auto policy = std::make_shared<NiceMock<MockRotationPolicy>>();  // ИСПРАВЛЕНО
+
+  ON_CALL(*policy, ShouldRotate(_, _))
+      .WillByDefault(testing::Invoke(
+          [](std::uint64_t, std::chrono::system_clock::time_point) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            return false;
+          }));
   ON_CALL(*policy, RequiresArchiving()).WillByDefault(Return(false));
 
   AsyncFileSink sink(log_file_.string(), formatter, nullptr, policy,
-                     1024 * 1024, std::chrono::milliseconds(5000),
-                     2, OverflowPolicy::kFailFast);
+                     1024 * 1024, std::chrono::milliseconds(5000), 2,
+                     OverflowPolicy::kFailFast);
 
   sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG1\n");
-  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Ждем, пока поток "уснет"
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(100));  // Ждем, пока поток "уснет"
 
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n"); // Очередь: 1
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG3\n"); // Очередь: 2 (полна)
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n");  // Очередь: 1
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"),
+             "MSG3\n");  // Очередь: 2 (полна)
 
-  EXPECT_THROW(
-      sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG4\n"),
-      std::overflow_error);
+  EXPECT_THROW(sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG4\n"),
+               std::overflow_error);
 }
 
 // Покрывает: OverflowPolicy::kBlock, queue_cv_.notify_all() в WorkerLoop
 TEST_F(AsyncFileSinkTest, OverflowPolicy_KBlock_BlocksAndResumes) {
   auto formatter = std::make_shared<NiceMock<MockFormatter>>();
-  auto policy = std::make_shared<NiceMock<MockRotationPolicy>>(); // ИСПРАВЛЕНО
-  
-  ON_CALL(*policy, ShouldRotate(_, _)).WillByDefault(testing::Invoke(
-      [](std::uint64_t, std::chrono::system_clock::time_point) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        return false;
-      }));
+  auto policy = std::make_shared<NiceMock<MockRotationPolicy>>();  // ИСПРАВЛЕНО
+
+  ON_CALL(*policy, ShouldRotate(_, _))
+      .WillByDefault(testing::Invoke(
+          [](std::uint64_t, std::chrono::system_clock::time_point) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            return false;
+          }));
   ON_CALL(*policy, RequiresArchiving()).WillByDefault(Return(false));
 
   AsyncFileSink sink(log_file_.string(), formatter, nullptr, policy,
-                     1024 * 1024, std::chrono::milliseconds(5000),
-                     2, OverflowPolicy::kBlock);
+                     1024 * 1024, std::chrono::milliseconds(5000), 2,
+                     OverflowPolicy::kBlock);
 
   sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG1\n");
-  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Ждем, пока поток "уснет"
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(100));  // Ждем, пока поток "уснет"
 
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n"); // Очередь: 1
-  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG3\n"); // Очередь: 2 (полна)
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG2\n");  // Очередь: 1
+  sink.Write(MakeRecord(LogLevel::kInfo, "msg"),
+             "MSG3\n");  // Очередь: 2 (полна)
 
   std::atomic<bool> write_completed{false};
-  
+
   std::jthread writer_thread([&]() {
-    sink.Write(MakeRecord(LogLevel::kInfo, "msg"), "MSG4\n"); // Должно заблокироваться
+    sink.Write(MakeRecord(LogLevel::kInfo, "msg"),
+               "MSG4\n");  // Должно заблокироваться
     write_completed.store(true);
   });
 
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  EXPECT_FALSE(write_completed.load()) << "Write should be blocked by kBlock policy";
+  EXPECT_FALSE(write_completed.load())
+      << "Write should be blocked by kBlock policy";
 
-  // Ожидаем, пока фоновый поток "проснется" (через ~500мс), обработает очередь 
+  // Ожидаем, пока фоновый поток "проснется" (через ~500мс), обработает очередь
   // и разблокирует writer_thread через queue_cv_.notify_all().
   auto start = std::chrono::steady_clock::now();
-  while (!write_completed.load() && 
+  while (!write_completed.load() &&
          std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
