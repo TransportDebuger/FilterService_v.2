@@ -1,0 +1,56 @@
+/**
+ * @internal
+ * @fn void stc::ServiceController::RegisterGlobalMetrics()
+ *
+ * @details
+ * Метод выполняет инициализацию и регистрацию агрегированных
+ * (глобальных) метрик сервиса в экземпляре
+ * @ref stc::metrics::IMetricsRegistry. Возвращенные дескрипторы
+ * сохраняются в структуре @ref stc::GlobalMetricsDescriptors
+ * и внедряются в оркестратор @ref stc::Master, а затем в
+ * рабочие потоки @ref stc::Worker.
+ *
+ * Архитектурное решение разделения метрик на глобальные и
+ * пер-источниковые (@ref stc::SourceMetricsDescriptors)
+ * обусловлено необходимостью предоставления как общей
+ * картины производительности системы, так и детализации
+ * для точечной диагностики узких мест конкретных источников.
+ *
+ * Регистрируются следующие типы метрик:
+ * - Счетчики (@ref stc::metrics::ICounter):
+ *   @c xml_files_processed_total, @c xml_files_failed_total,
+ *   @c xml_records_processed_total, @c xml_records_matched_total,
+ *   @c xml_bytes_processed_total. Используются для расчета
+ *   скорости обработки (throughput) и объема данных.
+ * - Датчики (@ref stc::metrics::IGauge):
+ *   @c xml_comparison_templates_count (размер CSV-словаря),
+ *   @c active_workers_count (текущее количество потоков),
+ *   @c xml_processing_duration_avg_seconds (скользящее среднее).
+ * - Гистограммы (@ref stc::metrics::IHistogram):
+ *   @c xml_processing_duration_seconds с заданными бакетами
+ *   (от 0.01 до 300 секунд) для оценки перцентилей задержки.
+ *
+ * @pre Метод вызывается строго в контексте основного потока
+ *      на этапе инициализации (@ref stc::ServiceController::Run)
+ *      до запуска фоновых потоков воркеров.
+ * @post Все дескрипторы валидны и готовы к lock-free обновлению
+ *       из множества конкурентных потоков.
+ *
+ * @note Возвращаемые реестром умные указатели
+ *       (@c std::shared_ptr) обеспечивают потокобезопасность
+ *       на «горячем пути» за счет использования атомарных
+ *       примитивов (@c std::atomic) с порядком памяти
+ *       @c memory_order_relaxed.
+ *
+ * @warning Имена метрик жестко заданы в коде и соответствуют
+ *          спецификации Prometheus Text Exposition. Изменение
+ *          имен потребует синхронного обновления правил
+ *          алертинга и дашбордов в системах мониторинга.
+ *
+ * @see stc::metrics::MetricsRegistry::RegisterCounter
+ * @see stc::metrics::MetricsRegistry::RegisterGauge
+ * @see stc::metrics::MetricsRegistry::RegisterHistogram
+ * @see stc::GlobalMetricsDescriptors
+ *
+ * @since 4.0.0
+ */
