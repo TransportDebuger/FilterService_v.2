@@ -1,0 +1,76 @@
+/**
+ * @struct stc::GlobalMetricsDescriptors
+ *
+ * @details
+ * Структура выступает в роли DTO (Data Transfer Object) для
+ * агрегации дескрипторов глобальных метрик сервиса. В отличие
+ * от @ref stc::SourceMetricsDescriptors, который отслеживает
+ * показатели в разрезе отдельных источников, данный класс
+ * аккумулирует суммарную статистику по всему приложению.
+ *
+ * @subsection sub_gmd_dto Архитектурная роль DTO
+ *
+ * Архитектурное решение упаковать 9 дескрипторов в единую
+ * структуру устраняет проблему Parameter Tunneling. При
+ * инъекции зависимостей от @ref stc::Master к пулу
+ * @ref stc::Worker передается один экземпляр DTO, что
+ * сохраняет читаемость сигнатур и упрощает расширение
+ * набора метрик в будущем без модификации конструкторов.
+ *
+ * @subsection sub_gmd_semantics Семантика типов метрик
+ *
+ * Выбор интерфейсов из подсистемы @c stc::metrics строго
+ * подчиняется модели данных Prometheus:
+ * - @c ICounter используется для монотонно возрастающих
+ *   значений (количество файлов, записей, байтов).
+ * - @c IGauge применяется для фиксации мгновенных состояний
+ *   (число активных воркеров, количество шаблонов,
+ *   скользящее среднее время обработки).
+ * - @c IHistogram служит для сбора распределения времени
+ *   обработки одного файла по заданным бакетам.
+ *
+ * @subsection sub_gmd_ownership Владение и жизненный цикл
+ *
+ * Использование @c std::shared_ptr для хранения дескрипторов
+ * гарантирует, что ссылки на метрики остаются валидными даже
+ * при асинхронной остановке воркеров. Фоновые потоки могут
+ * безопасно вызывать методы @c Increment() или @c Set() до
+ * момента полного завершения своих циклов, не опасаясь
+ * обращения к уже уничтоженному реестру
+ * (@ref stc::metrics::IMetricsRegistry).
+ *
+ * @note Сама структура является агрегатором и не содержит
+ *       внутренних мьютексов. Потокобезопасность операций
+ *       инкремента и установки значений гарантируется
+ *       атомарными механизмами, инкапсулированными внутри
+ *       конкретных реализаций интерфейсов @c stc::metrics.
+ *
+ * @dot
+ * digraph GlobalMetricsFlow {
+ *     graph [rankdir=TB, splines=ortho, nodesep=0.5,
+ *            ranksep=0.8, fontname="Helvetica"];
+ *     node [shape=record, fontname="Helvetica", fontsize=10];
+ *     edge [fontname="Helvetica", fontsize=9];
+ *
+ *     Registry [label="IMetricsRegistry"];
+ *     Master [label="Master"];
+ *     GMD [label="GlobalMetricsDescriptors"];
+ *     W1 [label="Worker #1"];
+ *     W2 [label="Worker #2"];
+ *     Prom [label="Prometheus"];
+ *
+ *     Registry -> GMD [label="creates"];
+ *     Master -> GMD [label="holds"];
+ *     GMD -> W1 [label="shared_ptr"];
+ *     GMD -> W2 [label="shared_ptr"];
+ *     W1 -> Prom [label="exposes"];
+ *     W2 -> Prom [label="exposes"];
+ * }
+ * @enddot
+ *
+ * @see stc::SourceMetricsDescriptors
+ * @see stc::metrics::IMetricsRegistry
+ * @see stc::Master
+ *
+ * @since 1.0.0
+ */
