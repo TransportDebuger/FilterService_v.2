@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XmlFilter Configuration Manager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Экран авторизации -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-box">
+            <h2>Authentication</h2>
+            <form id="login-form">
+                <input type="text" id="username" placeholder="Username" required>
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="submit">Login</button>
+                <p id="auth-error" class="error-msg"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Основное приложение -->
+    <div id="app-screen" class="screen hidden">
+        <header>
+            <h1>Configuration Editor</h1>
+            <div class="header-actions">
+                <div id="service-status" class="status-indicator unknown" title="Unknown">
+                    <span class="status-dot"></span> <span id="status-text">Unknown</span>
+                </div>
+                <button id="btn-restart-service" class="btn-warning">Restart Service</button>
+                <button id="btn-cancel" class="btn-secondary">Cancel Changes</button>
+                <button id="btn-save" class="btn-primary">Save & Reload</button>
+                <button id="btn-logout" class="btn-secondary">Logout</button>
+            </div>
+        </header>
+        <main id="config-editor-container">
+            <!-- Сюда будет рендериться JSON Schema -->
+        </main>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

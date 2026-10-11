@@ -1,0 +1,36 @@
+body { font-family: sans-serif; margin: 0; padding: 0; background: #f4f4f9; color: #333; }
+.screen { display: flex; flex-direction: column; min-height: 100vh; }
+.hidden { display: none !important; }
+
+/* Auth */
+.auth-box { max-width: 300px; margin: 100px auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.auth-box input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; box-sizing: border-box; }
+.error-msg { color: red; font-size: 0.9em; }
+
+/* Header */
+header { background: #2c3e50; color: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-primary { background: #27ae60; color: #fff; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.btn-warning { background: #e67e22; color: #fff; }
+.btn-danger { background: #c0392b; color: #fff; padding: 4px 8px; font-size: 0.8em; }
+
+/* Status Indicator */
+.status-indicator { display: flex; align-items: center; gap: 5px; font-weight: bold; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.status-indicator.active .status-dot { background: #2ecc71; }
+.status-indicator.inactive .status-dot { background: #e74c3c; }
+.status-indicator.unknown .status-dot { background: #f1c40f; }
+
+/* Editor */
+main { padding: 20px; flex: 1; }
+.field-group { background: #fff; margin-bottom: 15px; padding: 15px; border-radius: 6px; border: 1px solid #ddd; }
+.field-group h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+.field-row { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+.field-row label { min-width: 150px; font-weight: bold; }
+.field-row input, .field-row select, .field-row textarea { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+.array-item { border-left: 3px solid #3498db; padding-left: 10px; margin-bottom: 10px; position: relative; }
+.array-item .btn-danger { position: absolute; top: 0; right: 0; }
+.btn-add { background: #3498db; color: #fff; margin-top: 10px; }
+.key-input { max-width: 150px; font-weight: bold; color: #2980b9; }

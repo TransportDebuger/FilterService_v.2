@@ -1,0 +1,7 @@
+Flask==3.0.2
+jsonschema==4.21.1
+python-dotenv==1.0.1
+PyJWT==2.8.0
+bcrypt==4.1.2
+requests==2.31.0
+jsonpatch==1.33
