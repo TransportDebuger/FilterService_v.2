@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XmlFilter Configuration Manager</title>
+    <title>XmlFilter Management Console</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -23,19 +23,89 @@
     <!-- Основное приложение -->
     <div id="app-screen" class="screen hidden">
         <header>
-            <h1>Configuration Editor</h1>
+            <h1>XmlFilter Management Console</h1>
             <div class="header-actions">
                 <div id="service-status" class="status-indicator unknown" title="Unknown">
                     <span class="status-dot"></span> <span id="status-text">Unknown</span>
                 </div>
                 <button id="btn-restart-service" class="btn-warning">Restart Service</button>
-                <button id="btn-cancel" class="btn-secondary">Cancel Changes</button>
-                <button id="btn-save" class="btn-primary">Save & Reload</button>
                 <button id="btn-logout" class="btn-secondary">Logout</button>
             </div>
         </header>
-        <main id="config-editor-container">
-            <!-- Сюда будет рендериться JSON Schema -->
+        
+        <!-- Навигация (Табы) -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="config-tab">Configuration</button>
+            <button class="tab-btn" data-tab="profiles-tab">Exchange Profiles</button>
+            <button class="tab-btn" data-tab="manifest-tab">Exchange Manifest</button>
+        </nav>
+
+        <main>
+            <!-- Вкладка 1: Конфигуратор -->
+            <section id="config-tab" class="tab-content active">
+                <div class="tab-header">
+                    <h2>Service Configuration</h2>
+                    <div>
+                        <button id="btn-cancel" class="btn-secondary">Cancel Changes</button>
+                        <button id="btn-save" class="btn-primary">Save & Reload</button>
+                    </div>
+                </div>
+                <div id="config-editor-container"></div>
+            </section>
+
+            <!-- Вкладка 2: Профили обмена -->
+            <section id="profiles-tab" class="tab-content hidden">
+                <div class="tab-header">
+                    <h2>Transport Profiles</h2>
+                    <button id="btn-add-profile" class="btn-primary">Add Profile</button>
+                </div>
+                <div id="profiles-container"></div>
+                
+                <!-- Модальное окно / Форма для профиля -->
+                <div id="profile-form-container" class="hidden">
+                    <h3 id="profile-form-title">New Profile</h3>
+                    <form id="profile-form">
+                        <input type="hidden" id="profile-id">
+                        <div class="field-row">
+                            <label>Source Name:</label>
+                            <select id="profile-source" required></select>
+                        </div>
+                        <div class="field-row">
+                            <label>Transport Type:</label>
+                            <select id="profile-transport" required>
+                                <option value="pull">Pull (REST API)</option>
+                                <option value="webhook">Push (Webhook)</option>
+                                <option value="rabbitmq">Push (RabbitMQ)</option>
+                            </select>
+                        </div>
+                        <div id="transport-config-fields"></div>
+                        <div class="field-row">
+                            <label>ACK Action:</label>
+                            <select id="profile-action" required>
+                                <option value="delete">Delete File</option>
+                                <option value="move">Move to Archive</option>
+                            </select>
+                        </div>
+                        <div id="move-config" class="hidden field-row">
+                            <label>Archive Dir:</label>
+                            <input type="text" id="profile-archive-dir" placeholder="/opt/xmlfilter/archive">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="btn-cancel-profile" class="btn-secondary">Cancel</button>
+                            <button type="submit" class="btn-primary">Save Profile</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Вкладка 3: Манифест файлов -->
+            <section id="manifest-tab" class="tab-content hidden">
+                <div class="tab-header">
+                    <h2>Excluded Files Manifest</h2>
+                    <button id="btn-refresh-manifest" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="manifest-container"></div>
+            </section>
         </main>
     </div>
 

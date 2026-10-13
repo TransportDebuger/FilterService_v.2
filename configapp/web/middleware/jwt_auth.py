@@ -2,15 +2,19 @@ from flask import request, jsonify, g
 from domain.services.jwt_provider import JwtTokenProvider, TokenExpiredError, InvalidTokenError
 
 def create_jwt_middleware(jwt_provider: JwtTokenProvider):
-    """
-    Фабрика middleware для проверки JWT-токенов.
-    Интегрируется в Flask через @app.before_request.
-    """
     def middleware():
-        # Исключаем публичные эндпоинты (Blueprint 'auth')
+        # 1. Исключаем публичные эндпоинты аутентификации
         if request.blueprint == 'auth':
             return None
             
+        # 2. Исключаем эндпоинты обмена, защищенные HMAC-токенами
+        if request.blueprint == 'export' and request.path in [
+            '/api/v1/export/download', 
+            '/api/v1/export/ack'
+        ]:
+            return None
+            
+        # 3. Проверка JWT для всех остальных защищенных эндпоинтов
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({"error": "Missing or invalid Authorization header"}), 401
@@ -21,7 +25,6 @@ def create_jwt_middleware(jwt_provider: JwtTokenProvider):
             if payload.get('type') != 'access':
                 return jsonify({"error": "Invalid token type"}), 401
             
-            # Сохранение идентификатора пользователя в контексте запроса
             g.current_user = payload.get('sub')
         except TokenExpiredError:
             return jsonify({"error": "Token has expired"}), 401

@@ -2,14 +2,44 @@ import { api } from './api.js';
 import { state } from './state.js';
 import { generatePatch } from './patch-generator.js';
 import { SchemaRenderer } from './schema-renderer.js';
+import { ProfilesManager } from './export-profiles.js';
+import { ManifestManager } from './export-manifest.js';
 
 export class UIController {
     constructor() {
         this.renderer = new SchemaRenderer('config-editor-container');
+        this.profilesManager = new ProfilesManager();
+        this.manifestManager = new ManifestManager();
+        
+        // Экспорт в window для onclick handlers в HTML
+        window.profilesManager = this.profilesManager;
+        window.manifestManager = this.manifestManager;
+
         this._bindEvents();
         this._startStatusPolling();
+        this._initTabs();
         
-        state.subscribe(() => this._updateView());
+        state.subscribe(() => this._updateConfigView());
+    }
+
+    _initTabs() {
+        const tabs = document.querySelectorAll('.tab-btn');
+        const contents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                contents.forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                const targetId = tab.getAttribute('data-tab');
+                document.getElementById(targetId).classList.add('active');
+
+                // Ленивая загрузка данных при переключении вкладок
+                if (targetId === 'profiles-tab') this.profilesManager.loadProfiles();
+                if (targetId === 'manifest-tab') this.manifestManager.loadManifest();
+            });
+        });
     }
 
     _bindEvents() {
@@ -23,17 +53,9 @@ export class UIController {
             location.reload();
         });
 
-        document.getElementById('btn-cancel').addEventListener('click', () => {
-            state.resetToInitial();
-        });
-
-        document.getElementById('btn-save').addEventListener('click', async () => {
-            await this._handleSave();
-        });
-
-        document.getElementById('btn-restart-service').addEventListener('click', async () => {
-            await this._handleRestart();
-        });
+        document.getElementById('btn-cancel').addEventListener('click', () => state.resetToInitial());
+        document.getElementById('btn-save').addEventListener('click', async () => await this._handleSave());
+        document.getElementById('btn-restart-service').addEventListener('click', async () => await this._handleRestart());
     }
 
     async _handleLogin() {
@@ -93,7 +115,7 @@ export class UIController {
                 state.setConfig(newConfig, newEtag);
                 alert('Configuration saved and service reloaded.');
             } else if (res.status === 409) {
-                alert('Conflict: Configuration was modified by another user. Please reload.');
+                alert('Conflict: Configuration was modified. Please reload.');
                 await this._loadConfig();
             } else {
                 const err = await res.json();
@@ -119,22 +141,18 @@ export class UIController {
             if (!api.accessToken) return;
             try {
                 const res = await api.request('/service/status');
-                if (res.ok) {
-                    state.setServiceStatus(await res.json());
-                }
+                if (res.ok) state.setServiceStatus(await res.json());
             } catch (e) { /* ignore */ }
         };
         poll();
         setInterval(poll, 5000);
     }
 
-    _updateView() {
-        // Обновление редактора
+    _updateConfigView() {
         if (state.currentConfig) {
             this.renderer.render(state.currentConfig);
         }
 
-        // Обновление статуса сервиса
         const statusEl = document.getElementById('service-status');
         const textEl = document.getElementById('status-text');
         const status = state.serviceStatus;
