@@ -4,16 +4,19 @@ import { generatePatch } from './patch-generator.js';
 import { SchemaRenderer } from './schema-renderer.js';
 import { ProfilesManager } from './export-profiles.js';
 import { ManifestManager } from './export-manifest.js';
+import { ComparisonManager } from './comparison-manager.js';
 
 export class UIController {
     constructor() {
         this.renderer = new SchemaRenderer('config-editor-container');
         this.profilesManager = new ProfilesManager();
         this.manifestManager = new ManifestManager();
+        this.comparisonManager = new ComparisonManager(); // Новый модуль
         
         // Экспорт в window для onclick handlers в HTML
         window.profilesManager = this.profilesManager;
         window.manifestManager = this.manifestManager;
+        window.comparisonManager = this.comparisonManager; // Экспорт для onclick
 
         this._bindEvents();
         this._startStatusPolling();

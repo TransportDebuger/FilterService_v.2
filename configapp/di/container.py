@@ -10,9 +10,11 @@ from datasource.file_system.file_config_repository import FileConfigRepository
 from datasource.file_system.local_file_system_excluded_files_repository import LocalFileSystemExcludedFilesRepository
 from datasource.sqlite.sqlite_user_repository import SqliteUserRepository
 from datasource.sqlite.sqlite_export_config_repository import SqliteExportConfigRepository
+from datasource.sqlite.sqlite_comparison_repository import SqliteComparisonRepository
 
 # Infrastructure
 from infrastructure.os.systemd_service_controller import SystemdServiceController
+from infrastructure.os.signal_sender import SignalSender
 from infrastructure.network.prometheus_health_check_client import PrometheusHealthCheckClient
 from infrastructure.security.hmac_token_provider import HmacTokenProvider
 from infrastructure.file_system.file_system_operator import LocalFileSystemOperator
@@ -24,6 +26,7 @@ from infrastructure.scheduler.background_scheduler import BackgroundScheduler
 from domain.services.config_validator import ConfigValidator
 from domain.services.jwt_provider import JwtTokenProvider
 from domain.services.source_config_extractor import SourceConfigExtractor
+from domain.services.comparison_version_validator import ComparisonVersionValidator
 from domain.ports.transport_gateway import TransportGateway
 
 # Application (Use Cases)
@@ -36,6 +39,14 @@ from application.use_cases.generate_export_manifest import GenerateExportManifes
 from application.use_cases.serve_file_by_token import ServeFileByTokenUseCase
 from application.use_cases.process_acknowledgment import ProcessAcknowledgmentUseCase
 from application.use_cases.dispatch_excluded_files import DispatchExcludedFilesUseCase
+from application.use_cases.apply_comparison_batch import ApplyComparisonBatchUseCase
+from application.use_cases.sync_comparison_list import SyncComparisonListUseCase
+from application.use_cases.get_comparison_records import GetComparisonRecordsUseCase
+from application.use_cases.update_comparison_list import UpdateComparisonListOrchestrator
+
+from web.controller.comparison_controller import ComparisonController, comparison_bp
+from application.use_cases.get_comparison_records import GetComparisonRecordsUseCase
+
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +73,15 @@ class Container:
         self._user_repo = SqliteUserRepository(self._db)
         self._export_config_repo = SqliteExportConfigRepository(self._db)
         self._excluded_files_repo = LocalFileSystemExcludedFilesRepository()
+        self._comparison_repo = SqliteComparisonRepository(self._db)
 
         # 4. Инициализация инфраструктурных адаптеров
         self._service_controller = SystemdServiceController(
             pid_file=Path(self._env_reader.get('SERVICE_PID_FILE')),
             service_name=self._env_reader.get('SERVICE_NAME', 'xmlfilter')
+        )
+        self._signal_sender = SignalSender(
+            pid_file_path=Path(self._env_reader.get('SERVICE_PID_FILE'))
         )
         
         metrics_port = self._env_reader.get('SERVICE_METRICS_PORT', '9090')
@@ -104,6 +119,7 @@ class Container:
         )
         
         self._source_extractor = SourceConfigExtractor()
+        self._comparison_validator = ComparisonVersionValidator(self._comparison_repo)
 
     # =========================================================================
     # Фабрики Use Cases (Application Layer)
@@ -156,6 +172,21 @@ class Container:
             fs_operator=self._fs_operator
         )
 
+    def apply_comparison_batch_use_case(self) -> ApplyComparisonBatchUseCase:
+        return ApplyComparisonBatchUseCase(self._comparison_repo, self._comparison_validator)
+
+    def sync_comparison_list_use_case(self) -> SyncComparisonListUseCase:
+        return SyncComparisonListUseCase(self._comparison_repo)
+
+    def get_comparison_records_use_case(self) -> GetComparisonRecordsUseCase:
+        return GetComparisonRecordsUseCase(self._comparison_repo)
+
+    def update_comparison_list_orchestrator(self) -> UpdateComparisonListOrchestrator:
+        return UpdateComparisonListOrchestrator(
+            apply_batch_uc=self.apply_comparison_batch_use_case(),
+            signal_sender=self._signal_sender
+        )
+
     def background_scheduler(self) -> BackgroundScheduler:
         interval = int(self._env_reader.get('PUSH_DISPATCH_INTERVAL_SECONDS', '10'))
         return BackgroundScheduler(
@@ -176,3 +207,17 @@ class Container:
     def export_config_repository(self) -> SqliteExportConfigRepository:
         """Предоставляет репозиторий профилей обмена для контроллеров."""
         return self._export_config_repo
+
+    @property
+    def comparison_repository(self) -> SqliteComparisonRepository:
+        """Предоставляет репозиторий списков сравнения для контроллеров."""
+        return self._comparison_repo
+
+    # Фабрики Use Cases
+    def get_comparison_records_use_case(self) -> GetComparisonRecordsUseCase:
+        return GetComparisonRecordsUseCase(self._comparison_repo)
+
+    # Прямой доступ для Web
+    @property
+    def comparison_repository(self) -> SqliteComparisonRepository:
+        return self._comparison_repo

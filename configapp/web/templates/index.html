@@ -38,6 +38,7 @@
             <button class="tab-btn active" data-tab="config-tab">Configuration</button>
             <button class="tab-btn" data-tab="profiles-tab">Exchange Profiles</button>
             <button class="tab-btn" data-tab="manifest-tab">Exchange Manifest</button>
+            <button class="tab-btn" data-tab="comparison-tab">Comparison Lists</button>
         </nav>
 
         <main>
@@ -106,6 +107,37 @@
                 </div>
                 <div id="manifest-container"></div>
             </section>
+
+            <section id="comparison-tab" class="tab-content hidden">
+    <div class="tab-header">
+        <h2>Comparison Lists Management</h2>
+        <button id="btn-refresh-lists" class="btn-secondary">Refresh</button>
+    </div>
+    
+    <div class="field-row">
+        <label>Select List:</label>
+        <select id="comparison-list-select"></select>
+        <span id="current-version" class="badge badge-pull"></span>
+    </div>
+
+    <div id="comparison-records-container"></div>
+
+    <!-- Форма добавления/редактирования записи -->
+    <div id="record-form-container" class="hidden">
+        <h3 id="record-form-title">New Record</h3>
+        <form id="record-form">
+            <input type="hidden" id="record-id">
+            <div class="field-row">
+                <label>Data (JSON):</label>
+                <textarea id="record-data" rows="6" placeholder='{"lname": "Иванов", "ndoc": "123"}' required></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" id="btn-cancel-record" class="btn-secondary">Cancel</button>
+                <button type="submit" class="btn-primary">Save & Apply</button>
+            </div>
+        </form>
+    </div>
+</section>
         </main>
     </div>
 

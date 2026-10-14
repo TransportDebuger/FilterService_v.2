@@ -11,6 +11,7 @@ class Database:
     def _init_db(self):
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +28,28 @@ class Database:
                     ack_action TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS comparison_lists (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    db_path TEXT UNIQUE NOT NULL,
+                    serial_version INTEGER NOT NULL DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS comparison_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    list_id INTEGER NOT NULL,
+                    data TEXT NOT NULL, -- JSON строка
+                    record_version INTEGER NOT NULL DEFAULT 1,
+                    is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                    FOREIGN KEY(list_id) REFERENCES comparison_lists(id)
+                )
+            """)
             conn.commit()
 
     def get_connection(self):
+        conn = sqlite3.connect(self._db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")
         return sqlite3.connect(self._db_path)

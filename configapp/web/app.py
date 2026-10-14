@@ -7,6 +7,7 @@ from web.controller.config_controller import ConfigController, config_bp
 from web.controller.service_controller import ServiceController, service_bp
 from web.controller.export_controller import ExportController, export_bp
 from web.middleware.jwt_auth import create_jwt_middleware
+from web.controller.comparison_controller import ComparisonController, comparison_bp
 
 def create_app() -> Flask:
     app = Flask(__name__, 
@@ -56,6 +57,14 @@ def create_app() -> Flask:
         export_config_repo=container.export_config_repository
     )
     export_controller.register_routes()
+
+    # 5. Модуль управления списками сравнения
+    comparison_controller = ComparisonController(
+        orchestrator=container.update_comparison_list_orchestrator(),
+        get_records_uc=container.get_comparison_records_use_case(),
+        comparison_repo=container.comparison_repository
+    )
+    comparison_controller.register_routes()
     
     # =========================================================================
     # Регистрация Blueprints и Middleware
@@ -64,6 +73,9 @@ def create_app() -> Flask:
     app.register_blueprint(config_bp)
     app.register_blueprint(service_bp)
     app.register_blueprint(export_bp)
+
+    app.register_blueprint(comparison_bp)
+    
     
     # Глобальный middleware для проверки JWT
     app.before_request(create_jwt_middleware(container.jwt_provider))

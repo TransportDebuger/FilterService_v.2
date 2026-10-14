@@ -25,3 +25,6 @@ tr:hover { background: #f1f1f1; }
 .badge-push { background: #e67e22; }
 .badge-delete { background: #e74c3c; }
 .badge-move { background: #2ecc71; }
+
+textarea { width: 100%; font-family: monospace; font-size: 0.9em; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+#record-form-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 20px; border: 1px solid #e67e22; }
