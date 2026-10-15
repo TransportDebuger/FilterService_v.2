@@ -1,9 +1,9 @@
 /**
- * @file service_controller.hpp
- * @brief Корень композиции и контроллер жизненного цикла сервиса.
- * @version 4.1.0
- * @date 2026-07-24
- */
+@file service_controller.hpp
+@brief Корень композиции и контроллер жизненного цикла сервиса.
+@version 4.2.0
+@date 2026-10-24
+*/
 #pragma once
 
 #include <atomic>
@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility> // Для std::pair
 
 #include "../domain/DTO/metrics_descriptors.hpp"
 #include "../domain/FilterListManager.hpp"
@@ -28,99 +29,50 @@
 
 namespace stc {
 
-/**
- * @class ServiceController
- * @brief Управляет запуском, конфигурацией и жизненным циклом сервиса.
- */
 class ServiceController {
- public:
-  /**
-   * @brief Основная точка входа сервиса.
-   *
-   * @param[in] argc Количество аргументов командной строки.
-   * @param[in] argv Массив строк аргументов командной строки.
-   * @return int Код завершения процесса (EXIT_SUCCESS или EXIT_FAILURE).
-   */
-  int Run(int argc, char** argv);
+public:
+    int Run(int argc, char** argv); 
+    [[nodiscard]] std::string GetMetricsPayload() const;
 
-  /**
-   * @brief Формирует текстовый снимок метрик в формате Prometheus.
-   *
-   * @return std::string Текстовый дамп метрик.
-   */
-  [[nodiscard]] std::string GetMetricsPayload() const;
+private:
+    void Initialize(const ApplicationConfiguration& config);
+    void RegisterGlobalMetrics();
+    void MainLoop();
+    void HandleShutdown();
+    
+    /// @brief Обработчик SIGHUP (транзакционная перезагрузка конфигурации и воркеров).
+    void HandleSighup();
+    
+    /// @brief Обработчик SIGUSR1 (Hot-Reload списков сравнения из SQLite).
+    void HandleSigusr1();
 
- private:
-  /**
-   * @brief Инициализирует SignalRouter и Master.
-   *
-   * @param[in] config Строгий DTO конфигурации.
-   * @private
-   */
-  void Initialize(const ApplicationConfiguration& config);
+    /// @brief Загружает путь к SQLite и ID списка из db_config.json или ENV.
+    /// @return std::pair<std::string, int> Путь к БД и ID списка.
+    std::pair<std::string, int> LoadComparisonDbConfig();
 
-  /**
-   * @brief Регистрирует общие метрики в реестре.
-   * @private
-   */
-  void RegisterGlobalMetrics();
-  
-  /**
-   * @brief Главный цикл работы сервиса.
-   * @private
-   */
-  void MainLoop();
+    void PrintHelp();
+    void PrintVersion();
 
-  /**
-   * @brief Обработчик завершения работы (Graceful Shutdown).
-   * @private
-   */
-  void HandleShutdown();
+    std::unique_ptr<PidFileManager> pid_file_mgr_;
+    std::shared_ptr<stc::logger::ILogger> logger_;
+    std::unique_ptr<Master> master_;
+    std::unique_ptr<stc::signals::SignalRouter> signal_router_;
+    std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
+    std::shared_ptr<stc::FilterListManager> filter_list_manager_;
+    std::unique_ptr<ConfigurationService> config_service_;
+    std::unique_ptr<MetricsHttpServer> metrics_server_;
+    
+    GlobalMetricsDescriptors global_metrics_;
+    
+    std::atomic<bool> running_{false};
+    std::mutex mtx_;
+    std::condition_variable cv_;
+    std::atomic<bool> shutdown_requested_{false};
 
-  /**
-   * @brief Обработчик сигнала SIGHUP (транзакционная перезагрузка).
-   * @private
-   */
-  void HandleSighup();
-
-  /**
-   * @brief Выводит справочную информацию в stdout.
-   * @private
-   */
-  void PrintHelp();
-
-  /**
-   * @brief Выводит информацию о версии в stdout.
-   * @private
-   */
-  void PrintVersion();
-
-  /// Менеджер PID-файла.
-  std::unique_ptr<PidFileManager> pid_file_mgr_;
-  /// Диспетчер логирования.
-  std::shared_ptr<stc::logger::ILogger> logger_;
-  /// Оркестратор воркеров.
-  std::unique_ptr<Master> master_;
-  /// Маршрутизатор сигналов.
-  std::unique_ptr<stc::signals::SignalRouter> signal_router_;
-  /// Реестр метрик.
-  std::shared_ptr<stc::metrics::IMetricsRegistry> metrics_registry_;
-  /// Менеджер списков фильтрации.
-  std::shared_ptr<stc::FilterListManager> filter_list_manager_;
-  /// Сервис управления конфигурацией.
-  std::unique_ptr<ConfigurationService> config_service_;
-  /// HTTP-сервер для экспозиции метрик.
-  std::unique_ptr<MetricsHttpServer> metrics_server_;
-  /// Дескрипторы общих метрик.
-  GlobalMetricsDescriptors global_metrics_;
-  /// Флаг состояния основного цикла.
-  std::atomic<bool> running_{false};
-  /// Мьютекс для синхронизации.
-  std::mutex mtx_;
-  /// Условная переменная.
-  std::condition_variable cv_;
-  /// Флаг запроса завершения работы.
-  std::atomic<bool> shutdown_requested_{false};
+    /// @private Путь к SQLite БД (кэшируется при старте для использования в SIGUSR1).
+    std::string sqlite_db_path_;
+    /// @private ID списка сравнения (кэшируется при старте для использования в SIGUSR1).
+    int comparison_list_id_{1};
 };
 
 }  // namespace stc

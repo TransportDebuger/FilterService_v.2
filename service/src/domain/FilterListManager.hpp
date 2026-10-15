@@ -1,114 +1,77 @@
 /**
 @file FilterListManager.hpp
-@brief Менеджер централизованного управления списками фильтрации XML.
-@version 3.0.0
-@date 2026-08-04
+@brief Менеджер централизованного управления списками фильтрации (SQLite + JSON).
+@version 4.0.0
+@date 2026-10-24
 */
 #pragma once
+
 #include <atomic>
-#include <fstream>
 #include <memory>
 #include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
+
 #include "stc/logger/ilogger.hpp"
 
 namespace stc {
+
 /**
 @class FilterListManager
-@brief Обеспечивает потокобезопасную загрузку, хранение и проверку данных из
-CSV-файлов.
+@brief Обеспечивает потокобезопасную загрузку из SQLite, хранение и проверку данных.
 */
 class FilterListManager {
 public:
-    /**
-    @brief Конструктор менеджера списков фильтрации.
-    @param[in] logger Диспетчер логирования.
-    */
     explicit FilterListManager(std::shared_ptr<stc::logger::ILogger> logger);
+    ~FilterListManager() = default;
 
     /**
-    @brief Инициализирует менеджер с указанием CSV-файла.
-    @param[in] csvPath Путь к CSV-файлу со списками фильтрации.
-    @throw std::runtime_error При ошибках загрузки CSV-файла.
+    @brief Инициализирует менеджер с указанием пути к SQLite и ID списка.
+    @param[in] db_path Абсолютный путь к файлу базы данных SQLite.
+    @param[in] list_id Идентификатор списка сравнения в таблице comparison_lists.
+    @throw std::runtime_error При ошибках открытия БД или чтения данных.
     */
-    void initialize(const std::string& csvPath);
-
+    void initialize(const std::string& db_path, int list_id);
+    
     /**
-    @brief Перезагружает данные из CSV-файла.
-    @throw std::runtime_error При ошибках перезагрузки.
+    @brief Выполняет горячую перезагрузку данных из SQLite.
+    @details Использует паттерн Read-Copy-Update (RCU). Воркеры не блокируются,
+             за исключением микросекунд на атомарную подмену указателя на хеш-таблицу.
     */
-    void reload();
-
+    void hotReload();
+    
     /**
     @brief Проверяет наличие значения в указанном столбце.
-    @param[in] column Имя столбца CSV для поиска.
+    @param[in] column Имя столбца (ключ JSON).
     @param[in] value Искомое значение.
     @return true Если значение найдено.
-    @throw std::invalid_argument При отсутствии указанного столбца.
     */
     bool contains(const std::string& column, const std::string& value) const;
-
-    /**
-    @brief Проверяет инициализацию менеджера.
-    @return true Если менеджер инициализирован.
-    */
+    
     bool isInitialized() const noexcept;
-
-    /**
-    @brief Получает путь к текущему CSV-файлу.
-    @return Путь к файлу или пустая строка, если не инициализирован.
-    */
-    std::string getCurrentCsvPath() const;
-
-    /**
-    @brief Возвращает общее количество загруженных записей (строк данных) из
-    CSV.
-    @return size_t Количество записей или 0, если менеджер не инициализирован.
-    */
     size_t getTotalRecordsCount() const noexcept;
-
-    /**
-    @brief Нормализует значение для сравнения.
-    @param[in] value Исходное значение.
-    @return std::string Нормализованное значение.
-    */
+    
     static std::string normalizeValue(const std::string& value);
 
 private:
-    /// @private Загружает данные из CSV-файла.
-    void loadCsvData();
+    /// @private Загружает данные из SQLite во временный контейнер и атомарно подменяет основные.
+    void loadFromSqlite();
 
-    /// @private Парсит строку CSV с учетом экранирования.
-    std::vector<std::string> parseCsvLine(const std::string& line) const;
-
-    /// @private Валидирует структуру загруженных данных.
-    void validateData() const;
-
-    /// @private Общее количество загруженных строк данных из CSV (без учета
-    /// заголовка).
-    std::atomic<size_t> total_records_count_{0};
-
-    /// @private Диспетчер логирования, полученный через DI.
     std::shared_ptr<stc::logger::ILogger> logger_;
-
-    /// @private Карта столбцов CSV: имя столбца -> множество значений.
-    std::unordered_map<std::string, std::unordered_set<std::string>>
-        columnData_;
-
-    /// @private Путь к текущему CSV-файлу.
-    std::string csvPath_;
-
-    /// @private Мьютекс для потокобезопасности (поддерживает shared_lock).
+    
+    std::string db_path_;
+    int list_id_{-1};
+    
+    /// @private Основная структура данных: column_name -> set of values.
+    std::unordered_map<std::string, std::unordered_set<std::string>> columnData_;
+    
+    /// @private Мьютекс для потокобезопасности (поддерживает shared_lock для чтения).
     mutable std::shared_mutex mutex_;
-
-    /// @private Флаг инициализации.
+    
+    std::atomic<size_t> total_records_count_{0};
     std::atomic<bool> initialized_{false};
-
-    /// @private Заголовки столбцов CSV.
-    std::vector<std::string> headers_;
 };
-}  // namespace stc
+
+} // namespace stc

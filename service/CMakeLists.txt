@@ -16,6 +16,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # ==============================================================================
 # Библиотеки для работы с XML и FTP
 find_package(LibXml2 REQUIRED)
+find_package(SQLite3 REQUIRED)
 find_package(CURL REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -83,6 +84,7 @@ target_link_libraries(xmlfilter PRIVATE
     CURL::libcurl
     nlohmann_json::nlohmann_json
     OpenSSL::Crypto
+    SQLite::SQLite3  # Добавлено для работы со списками сравнения
     
     # Инфраструктурные библиотеки проекта
     stc::fs

@@ -1,108 +1,165 @@
 /**
 @file FilterListManager.cpp
-@brief Реализация менеджера централизованного управления списками фильтрации.
-@version 3.0.0
-@date 2026-09-06
+@brief Реализация менеджера списков фильтрации на базе SQLite и nlohmann::json.
+@version 4.0.0
+@date 2026-10-24
 */
 #include "FilterListManager.hpp"
+
+#include <sqlite3.h>
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <mutex>
+#include <mutex> 
 
 namespace fs = std::filesystem;
 
 namespace stc {
 
-FilterListManager::FilterListManager(
-    std::shared_ptr<stc::logger::ILogger> logger)
+FilterListManager::FilterListManager(std::shared_ptr<stc::logger::ILogger> logger)
     : logger_(std::move(logger)) {}
 
-void FilterListManager::initialize(const std::string& csvPath) {
+void FilterListManager::initialize(const std::string& db_path, int list_id) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
-
-    if (csvPath.empty()) {
-        throw std::invalid_argument("CSV path cannot be empty");
+    
+    if (db_path.empty()) {
+        throw std::invalid_argument("SQLite DB path cannot be empty");
     }
-
-    if (!fs::exists(csvPath)) {
-        throw std::runtime_error("CSV file does not exist: " + csvPath);
+    if (!fs::exists(db_path)) {
+        throw std::runtime_error("SQLite DB file does not exist: " + db_path);
     }
-
-    csvPath_ = fs::absolute(csvPath).string();
-
+    
+    db_path_ = db_path;
+    list_id_ = list_id;
+    
     try {
-        loadCsvData();
-        validateData();
+        loadFromSqlite();
         initialized_.store(true);
-
         if (logger_) {
-            logger_->Info("FilterListManager initialized with " +
-                          std::to_string(columnData_.size()) +
-                          " columns from: " + csvPath_);
+            logger_->Info("FilterListManager initialized from SQLite. DB: " + db_path_ + 
+                          ", List ID: " + std::to_string(list_id_) + 
+                          ", Records: " + std::to_string(total_records_count_.load()));
         }
     } catch (const std::exception& e) {
         initialized_.store(false);
         if (logger_) {
-            logger_->Error("FilterListManager initialization failed: " +
-                           std::string(e.what()));
+            logger_->Error("FilterListManager initialization failed: " + std::string(e.what()));
         }
-        throw std::runtime_error("Failed to initialize FilterListManager: " +
-                                 std::string(e.what()));
+        throw std::runtime_error("Failed to initialize FilterListManager: " + std::string(e.what()));
     }
 }
 
-void FilterListManager::reload() {
+void FilterListManager::hotReload() {
     if (!initialized_.load()) {
-        throw std::runtime_error("FilterListManager not initialized");
+        if (logger_) logger_->Warning("hotReload called but manager is not initialized.");
+        return;
     }
-
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-
+    
+    if (logger_) logger_->Info("Starting hot-reload of comparison lists from SQLite...");
+    
     try {
-        columnData_.clear();
-        headers_.clear();
-        loadCsvData();
-        validateData();
-
+        // loadFromSqlite инкапсулирует логику RCU и сам захватывает unique_lock для подмены
+        loadFromSqlite();
         if (logger_) {
-            logger_->Info("FilterListManager reloaded successfully from: " +
-                          csvPath_);
+            logger_->Info("Hot-reload completed successfully. Total records: " + 
+                          std::to_string(total_records_count_.load()));
         }
     } catch (const std::exception& e) {
         if (logger_) {
-            logger_->Error("FilterListManager reload failed: " +
-                           std::string(e.what()));
+            logger_->Error("Hot-reload failed: " + std::string(e.what()) + ". Keeping old data in memory.");
         }
-        throw std::runtime_error("Failed to reload FilterListManager: " +
-                                 std::string(e.what()));
     }
 }
 
-bool FilterListManager::contains(const std::string& column,
-                                 const std::string& value) const {
+void FilterListManager::loadFromSqlite() {
+    sqlite3* db = nullptr;
+    // Открываем строго в режиме READONLY. Это позволяет Flask-приложению (Writer) 
+    // продолжать записи в WAL-файл без блокировок.
+    int rc = sqlite3_open_v2(db_path_.c_str(), &db, SQLITE_OPEN_READONLY, nullptr);
+    if (rc != SQLITE_OK) {
+        std::string err = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        throw std::runtime_error("Failed to open SQLite DB: " + err);
+    }
+
+    const char* sql = "SELECT data FROM comparison_records WHERE list_id = ? AND is_deleted = 0";
+    sqlite3_stmt* stmt = nullptr;
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::string err = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        throw std::runtime_error("Failed to prepare SQL statement: " + err);
+    }
+
+    sqlite3_bind_int(stmt, 1, list_id_);
+
+    // Временный контейнер для новых данных (Фаза Copy в паттерне RCU)
+    std::unordered_map<std::string, std::unordered_set<std::string>> tempData;
+    size_t record_count = 0;
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const unsigned char* text = sqlite3_column_text(stmt, 0);
+        if (!text) continue;
+
+        try {
+            std::string json_str(reinterpret_cast<const char*>(text));
+            auto json_obj = nlohmann::json::parse(json_str);
+
+            for (auto& [key, value] : json_obj.items()) {
+                std::string norm_key = normalizeValue(key);
+                // Приводим значение к строке (поддержка строк, чисел и т.д. из JSON)
+                std::string val_str = value.is_string() ? value.get<std::string>() : value.dump();
+                std::string norm_val = normalizeValue(val_str);
+                
+                tempData[norm_key].insert(norm_val);
+            }
+            record_count++;
+        } catch (const nlohmann::json::exception& e) {
+            if (logger_) {
+                logger_->Warning("Failed to parse JSON record in SQLite: " + std::string(e.what()));
+            }
+            // Пропускаем битую запись, не прерываем весь reload (Fail-Safe)
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    if (rc != SQLITE_DONE) {
+        throw std::runtime_error("Error during SQL execution");
+    }
+
+    // Фаза Update в паттерне RCU: атомарная подмена данных под эксклюзивной блокировкой
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+        columnData_ = std::move(tempData);
+    }
+    
+    total_records_count_.store(record_count, std::memory_order_relaxed);
+}
+
+bool FilterListManager::contains(const std::string& column, const std::string& value) const {
     if (!initialized_.load()) {
         throw std::runtime_error("FilterListManager not initialized");
     }
 
+    // Захватываем shared_lock. Множество воркеров могут читать данные параллельно.
     std::shared_lock<std::shared_mutex> lock(mutex_);
-
-    auto columnIt = columnData_.find(column);
+    
+    std::string norm_col = normalizeValue(column);
+    auto columnIt = columnData_.find(norm_col);
     if (columnIt == columnData_.end()) {
-        throw std::invalid_argument("Column not found: " + column);
+        return false; // В текущем списке нет такой колонки
     }
 
-    const std::string normalizedValue = normalizeValue(value);
-    return columnIt->second.find(normalizedValue) != columnIt->second.end();
+    std::string norm_val = normalizeValue(value);
+    return columnIt->second.find(norm_val) != columnIt->second.end();
 }
 
 bool FilterListManager::isInitialized() const noexcept {
     return initialized_.load();
-}
-
-std::string FilterListManager::getCurrentCsvPath() const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    return csvPath_;
 }
 
 size_t FilterListManager::getTotalRecordsCount() const noexcept {
@@ -110,26 +167,21 @@ size_t FilterListManager::getTotalRecordsCount() const noexcept {
 }
 
 std::string FilterListManager::normalizeValue(const std::string& value) {
+    // Логика нормализации (trim, lowercase, UTF-8 Cyrillic handling) 
+    // остается идентичной предыдущей версии для сохранения обратной совместимости
+    // с логикой XMLProcessor.
     std::string result;
     result.reserve(value.size());
-
     bool inWhitespace = false;
     bool hasContent = false;
 
     for (size_t i = 0; i < value.size();) {
         const unsigned char c = static_cast<unsigned char>(value[i]);
-
         if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-            if (hasContent) {
-                inWhitespace = true;
-            }
+            if (hasContent) inWhitespace = true;
             i++;
-        } else if (i + 1 < value.size() && c == 0xC2 &&
-                   static_cast<unsigned char>(value[i + 1]) == 0xA0) {
-            // Неразрывный пробел U+00A0
-            if (hasContent) {
-                inWhitespace = true;
-            }
+        } else if (i + 1 < value.size() && c == 0xC2 && static_cast<unsigned char>(value[i + 1]) == 0xA0) {
+            if (hasContent) inWhitespace = true;
             i += 2;
         } else {
             if (inWhitespace) {
@@ -137,14 +189,11 @@ std::string FilterListManager::normalizeValue(const std::string& value) {
                 inWhitespace = false;
             }
             hasContent = true;
-
             if (c < 0x80) {
                 result += static_cast<char>(std::tolower(c));
                 i++;
             } else if (i + 1 < value.size() && c == 0xD0) {
-                const unsigned char second =
-                    static_cast<unsigned char>(value[i + 1]);
-
+                const unsigned char second = static_cast<unsigned char>(value[i + 1]);
                 if (second >= 0x90 && second <= 0xAF) {
                     result += static_cast<char>(0xD0);
                     result += static_cast<char>(second + 0x20);
@@ -166,133 +215,7 @@ std::string FilterListManager::normalizeValue(const std::string& value) {
             }
         }
     }
-
     return result;
 }
 
-void FilterListManager::loadCsvData() {
-    std::ifstream file(csvPath_);
-    if (!file.is_open()) {
-        if (logger_) logger_->Error("Cannot open CSV: " + csvPath_);
-        throw std::runtime_error("Cannot open CSV file: " + csvPath_);
-    }
-
-    std::string line;
-    bool isFirstLine = true;
-    size_t lineNumber = 0;
-    size_t dataLinesCount = 0;
-
-    while (std::getline(file, line)) {
-        lineNumber++;
-
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-
-        auto values = parseCsvLine(line);
-
-        if (values.empty()) {
-            continue;
-        }
-
-        if (isFirstLine) {
-            headers_ = values;
-            for (const auto& header : headers_) {
-                const std::string normalizedHeader = normalizeValue(header);
-                columnData_[normalizedHeader] =
-                    std::unordered_set<std::string>();
-            }
-            isFirstLine = false;
-        } else {
-            if (values.size() != headers_.size()) {
-                if (logger_) {
-                    logger_->Warning("CSV line " + std::to_string(lineNumber) +
-                                     " has incorrect number of columns");
-                }
-                continue;
-            }
-
-            for (size_t i = 0; i < headers_.size(); ++i) {
-                const std::string normalizedHeader =
-                    normalizeValue(headers_[i]);
-                const std::string cleanValue = normalizeValue(values[i]);
-                // Пустые значения сохраняются как пустая строка
-                columnData_[normalizedHeader].insert(cleanValue);
-            }
-            dataLinesCount++;
-        }
-    }
-
-    file.close();
-
-    if (headers_.empty()) {
-        throw std::runtime_error("No valid headers found in CSV file");
-    }
-
-    total_records_count_.store(dataLinesCount, std::memory_order_relaxed);
-
-    if (logger_) {
-        logger_->Info("CSV data loaded: " + std::to_string(lineNumber) +
-                      " lines processed, " + std::to_string(dataLinesCount) +
-                      " data records");
-    }
-}
-
-std::vector<std::string> FilterListManager::parseCsvLine(
-    const std::string& line) const {
-    std::vector<std::string> result;
-    std::string current;
-    bool inQuotes = false;
-    bool escapeNext = false;
-
-    for (size_t i = 0; i < line.length(); ++i) {
-        char c = line[i];
-
-        if (escapeNext) {
-            current += c;
-            escapeNext = false;
-            continue;
-        }
-
-        if (c == '\\') {
-            escapeNext = true;
-            continue;
-        }
-
-        if (c == '"') {
-            if (inQuotes && i + 1 < line.length() && line[i + 1] == '"') {
-                current += '"';
-                ++i;
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (c == ',' && !inQuotes) {
-            result.push_back(current);
-            current.clear();
-        } else {
-            current += c;
-        }
-    }
-
-    result.push_back(current);
-    return result;
-}
-
-void FilterListManager::validateData() const {
-    if (headers_.empty()) {
-        throw std::runtime_error("No columns defined in CSV");
-    }
-
-    if (columnData_.empty()) {
-        throw std::runtime_error("No data loaded from CSV");
-    }
-
-    for (const auto& header : headers_) {
-        const std::string normalizedHeader = normalizeValue(header);
-        if (columnData_.find(normalizedHeader) == columnData_.end()) {
-            throw std::runtime_error("Missing data for column: " + header);
-        }
-    }
-}
-
-}  // namespace stc
+} // namespace stc
